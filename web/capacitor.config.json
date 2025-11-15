@@ -1,0 +1,12 @@
+{
+  "appId": "com.sharecare.app",
+  "appName": "ShareCare",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "android": {
+    "path": "../android"
+  },
+  "ios": {
+    "path": "../ios"
+  }
+}
