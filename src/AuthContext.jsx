@@ -1,4 +1,4 @@
-// src/AuthContext.jsx - FINAL ARCHITECTURAL FIX (ELIMINATING ADMIN FALLBACK RACE CONDITION)
+// src/AuthContext.jsx - FINAL FIX (Implements Wait/Poll for Profile Completion)
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
@@ -16,6 +16,24 @@ export const useAuth = () => {
   return useContext(AuthContext);
 };
 
+// Helper function to wait for the completion flag
+const waitForProfileCompletion = async (userRef) => {
+    return new Promise(resolve => {
+        const check = async () => {
+            const docSnap = await getDoc(userRef);
+            if (docSnap.exists() && docSnap.data().isProfileComplete) {
+                // Profile is complete! Resolve with the final data.
+                resolve(docSnap.data());
+            } else {
+                // Not complete yet, check again in 500ms
+                setTimeout(check, 500);
+            }
+        };
+        check();
+    });
+};
+
+
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -26,7 +44,7 @@ export const AuthProvider = ({ children }) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // CRITICAL FIX: Initialize the user's Firestore document immediately.
+    // CRITICAL: Initialize the user's Firestore document immediately.
     await setDoc(doc(db, "users", user.uid), {
         email: user.email,
         createdAt: new Date(),
@@ -56,59 +74,36 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // --- FINAL CORRECTED LOGIC: Loads profile and only runs Admin fallback if necessary ---
+  // --- FINAL CORRECTED LOGIC: Loads profile and WAITS for Auth.jsx to finish ---
   const loadProfileAndSetupGroup = async (user) => {
     const userRef = doc(db, "users", user.uid);
     let docSnap = await getDoc(userRef);
 
-    let currentGroupId = docSnap.data()?.groupId;
-    let userRole = docSnap.data()?.role;
-    let hipaaAccepted = docSnap.data()?.hipaaAccepted === true;
-    
-    // 🚨 FIX: Only run setup logic if GroupId and Role are BOTH missing.
-    // This allows Auth.jsx (invite) to write data without interference.
-    if (!currentGroupId || !userRole) {
-      
-      // 1. Check if the user is the Admin (created their own group)
-      const q = query(collection(db, "groups"), where("adminId", "==", user.uid));
-      const groupSnapshot = await getDocs(q);
-      
-      let newGroupId = currentGroupId;
-      let newRole = userRole;
-      
-      // If no group exists AND we are missing data, it MUST be a new Admin.
-      if (groupSnapshot.empty && !currentGroupId) {
-        // SCENARIO A: Brand new Admin user -> Create new group
-        const newGroupRef = await addDoc(collection(db, "groups"), {
-          name: `${user.email}'s Care Hub`,
-          adminId: user.uid,
-          createdAt: new Date(),
-        });
-        newGroupId = newGroupRef.id;
-        newRole = "Admin";
-        
-      } else if (!currentGroupId && groupSnapshot.docs.length > 0) {
-        // SCENARIO B: User logged in, has no groupId, but a group for them exists 
-        // (i.e., failed previous setup)
-        newGroupId = groupSnapshot.docs[0].id;
-        newRole = "Admin"; // Re-assert Admin role for cleanup/old users
-      }
-      
-      // 2. If new data was derived, update the user's profile
-      if (newGroupId && newRole) {
-          await setDoc(userRef, {
-              groupId: newGroupId,
-              role: newRole,
-          }, { merge: true });
-          currentGroupId = newGroupId;
-          userRole = newRole;
-      }
+    // If the document does not exist, we return (should only happen if sign-up is running)
+    if (!docSnap.exists()) {
+        setHasAcceptedHipaa(false);
+        setUserProfile({ groupId: null, role: null });
+        return; 
     }
+    
+    let finalData;
 
-    // Set all derived states for rendering
+    // 🚨 CRITICAL FIX: If profile is not complete, wait for it using polling
+    if (!docSnap.data()?.isProfileComplete) {
+        finalData = await waitForProfileCompletion(userRef);
+    } else {
+        finalData = docSnap.data();
+    }
+    
+    // --- Safely read the finalized data ---
+    let currentGroupId = finalData.groupId || null;
+    let userRole = finalData.role || null;
+    let hipaaAccepted = finalData.hipaaAccepted === true;
+    
+    // Set final states for rendering
     setHasAcceptedHipaa(hipaaAccepted);
     setUserProfile({ groupId: currentGroupId, role: userRole });
-  };
+};
   // -------------------------------------------------------------------
 
 

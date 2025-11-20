@@ -153,8 +153,10 @@
   color: #777;
   border-top: 1px dashed #eee;
   padding-top: 10px;
+  /* --- ADD THIS LINE --- */
+  word-break: break-word; 
+  /* --------------------- */
 }
-
 .task-actions-placeholder {
   text-align: right;
   border-top: 1px solid #eee;

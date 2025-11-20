@@ -1,9 +1,9 @@
-// src/components/Auth.jsx - UPDATED to make Invite Code OPTIONAL
+// src/components/Auth.jsx - FINAL FIX (Resolves AdminId Undefined Error)
 
 import { useState } from 'react';
 import { useAuth } from '../AuthContext'; 
 import { db } from '../firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore'; 
+import { doc, getDoc, updateDoc, collection, addDoc } from 'firebase/firestore'; 
 
 function Auth() {
   const [isLoginView, setIsLoginView] = useState(true); 
@@ -63,52 +63,74 @@ function Auth() {
 
     try {
       if (isLoginView) {
-        // Standard Login
         await login(email, password); 
       } else {
         // --- SIGNUP FLOW ---
         
         let validInvite = null;
-        let isInvitedUser = false;
-
-        // 1. If an invite code is provided, validate it.
+        let targetGroupId, targetRole;
+        
+        // 1. Validate Invite Code (If provided)
         if (inviteCode) {
             validInvite = await validateInviteCode(inviteCode);
             if (!validInvite) {
                 setLoading(false);
-                return; // Stop signup if code is invalid
+                return;
             }
-            isInvitedUser = true;
+            targetGroupId = validInvite.groupId;
+            targetRole = validInvite.role;
+
+        } else {
+            // SCENARIO 2 Setup: User is New Admin.
+            targetGroupId = null; // Will be created after signup
+            targetRole = "Admin";
         }
         
-        // 2. Execute Signup (AuthContext will create the base user doc)
+        // 2. Execute Signup (AuthContext creates the base user doc)
         const userCredential = await signup(email, password);
         const userId = userCredential.user.uid;
-        
-        // 3. Conditional User Profile Update
-        if (isInvitedUser) {
-            // User signed up with a valid invite, link them to the group/role
-            const userRef = doc(db, "users", userId);
-            await updateDoc(userRef, {
-                groupId: validInvite.groupId,
-                role: validInvite.role,
-            });
+        const userEmail = userCredential.user.email;
 
-            // Mark Invite as Used
+        // 3. CRITICAL: Group creation MUST happen AFTER signup/auth.
+        if (!validInvite) {
+            // Only run if it's the NEW ADMIN case (not an invited user)
+            const newGroupRef = await addDoc(collection(db, "groups"), {
+                name: `${userEmail}'s Care Hub`,
+                adminId: userId, 
+                createdAt: new Date(),
+            });
+            targetGroupId = newGroupRef.id;
+        }
+        
+        // 4. Build Final Profile Data
+        const profileData = {
+            groupId: targetGroupId,
+            role: targetRole,
+            isProfileComplete: true, // Set this LAST
+        };
+        
+        // 🚨 FIX: Only include the adminId field if the role is Admin.
+        if (targetRole === "Admin") {
+            profileData.adminId = userId;
+        }
+
+        // 5. Update User Profile (Single, decisive write)
+        const userRef = doc(db, "users", userId);
+        await updateDoc(userRef, profileData);
+        
+        // 6. Mark Invite as Used (if applicable)
+        if (validInvite) {
             const inviteRef = doc(db, "invites", inviteCode);
             await updateDoc(inviteRef, {
                 status: 'used',
-                usedBy: email,
+                usedBy: userEmail,
                 usedAt: new Date(),
             });
         }
-        
-        // Note: If !isInvitedUser, AuthContext will run loadProfileAndSetupGroup 
-        // after signup, which correctly assumes they are a new Admin and creates the group.
-
       }
     } catch (firebaseError) {
       console.error(firebaseError);
+      alert("Signup or Group Creation Failed. See console for details.");
       setError('Authentication Failed. Please check your credentials or try again.');
     } finally {
       setLoading(false);
@@ -122,7 +144,6 @@ function Auth() {
       <form onSubmit={handleSubmit} className="auth-form">
         {error && <p className="error-message" style={{ color: 'var(--color-danger)', border: '1px solid var(--color-danger)', padding: '10px', borderRadius: '4px' }}>{error}</p>}
 
-        {/* Email and Password fields remain the same */}
         <div className="form-group">
           <label htmlFor="auth-email">Email</label>
           <input
@@ -143,7 +164,6 @@ function Auth() {
           />
         </div>
         
-        {/* Invite Code Field (Optional, softer phrasing) */}
         {!isLoginView && (
             <div className="form-group">
                 <label htmlFor="invite-code">

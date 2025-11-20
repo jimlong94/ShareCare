@@ -1,57 +1,91 @@
-// src/components/NewTaskModal.jsx - UPDATED for DueDate
+// src/components/NewTaskModal.jsx - UPDATED for Edit Mode
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react' // 👈 NEW IMPORT: useEffect
 import './NewTaskModal.css'
 
-// Get the new props (onSave, assignees)
-function NewTaskModal({ onClose, onSave, assignees }) {
-  // --- UPDATED STATE ---
-  const [title, setTitle] = useState('')
-  const [assignee, setAssignee] = useState('')
-  const [category, setCategory] = useState('Appointment')
-  const [status, setStatus] = useState('Delegated')
-  const [notes, setNotes] = useState('')
-  const [dueDate, setDueDate] = useState('') // 👈 NEW STATE
-  // ---------------------
+// task prop is now optional for editing
+function NewTaskModal({ onClose, onSave, assignees, task }) { // 👈 NEW PROP
+  
+  // --- Initialization Logic ---
+  // Use useEffect to initialize state from the 'task' prop when editing
+  useEffect(() => {
+    if (task) {
+      setTitle(task.title || '')
+      setAssignee(task.assignee || '')
+      setCategory(task.category || 'Appointment')
+      setStatus(task.status || 'Delegated')
+      // Notes are read from the first entry in the updates array (for display)
+      setNotes(task.updates?.[0]?.text || '') 
+      setDueDate(task.dueDate || '')
+    }
+  }, [task]);
+  // --------------------------
+
+  // --- State for Edit/Create ---
+  const [title, setTitle] = useState(task ? task.title : '')
+  const [assignee, setAssignee] = useState(task ? task.assignee : '')
+  const [category, setCategory] = useState(task ? task.category : 'Appointment')
+  const [status, setStatus] = useState(task ? task.status : 'Delegated')
+  // For editing, populate notes from the first update entry, otherwise empty
+  const [notes, setNotes] = useState(task ? (task.updates?.[0]?.text || '') : '') 
+  const [dueDate, setDueDate] = useState(task ? task.dueDate : '') 
+  // -----------------------------
+
 
   const handleSubmit = (e) => {
     e.preventDefault()
 
-    // Simple validation
     if (!title || !assignee) {
       alert('Please fill in at least the Title and Assignee.')
       return
     }
 
-    // Create the new task object
-    const newTask = {
-      // We no longer need a client-side ID as Firestore provides it
+    // Determine the updates array structure:
+    let finalUpdates = task ? [...task.updates] : [];
+
+    if (task) {
+        // EDIT MODE: Update the first note entry if the notes text changed
+        if (finalUpdates.length > 0 && finalUpdates[0].text !== notes) {
+            finalUpdates[0].text = notes; // Overwrite the existing note text
+            // NOTE: For true history, we would push a new note here, but for MVP edit simplicity, we overwrite the initial note.
+        }
+    } else {
+        // CREATE MODE: Package notes as the first item in the 'updates' array
+        finalUpdates = notes ? [{ type: 'note', text: notes, timestamp: new Date() }] : [];
+    }
+
+    // Create the task object (includes ID if editing)
+    const submittedTask = {
+      ...(task && { id: task.id }), // Include ID only if editing
       title,
       assignee,
       category,
       status,
-      // 👈 NEW: dueDate is saved (can be an empty string if not set)
-      dueDate: dueDate, 
-      // 👈 UPDATED: notes is packaged as the first item in the 'updates' array
-      updates: notes ? [{ type: 'note', text: notes, timestamp: new Date() }] : [],
+      dueDate, 
+      updates: finalUpdates,
     }
 
-    // Pass the new task object up to App.jsx
-    onSave(newTask)
+    // Pass the task object up to App.jsx for saving/updating
+    onSave(submittedTask)
   }
+
+  // Determine modal title
+  const modalTitle = task ? 'Edit Task' : 'New Task';
+  const saveButtonText = task ? 'Update Task' : 'Save Task';
+
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>New Task</h2>
+          <h2>{modalTitle}</h2> {/* 👈 DYNAMIC TITLE */}
           <button className="btn-close" onClick={onClose}>
             &times;
           </button>
         </div>
 
         <form className="modal-form" onSubmit={handleSubmit}>
-          {/* Task Title */}
+          {/* Task Title, Assignee, Category, Status, Due Date inputs remain the same */}
           <div className="form-group">
             <label htmlFor="task-title">Task Title</label>
             <input
@@ -96,7 +130,7 @@ function NewTaskModal({ onClose, onSave, assignees }) {
             </div>
           </div>
 
-          <div className="form-row"> {/* 👈 NEW ROW for Status and DueDate */}
+          <div className="form-row">
             {/* Status */}
             <div className="form-group">
               <label htmlFor="task-status">Status</label>
@@ -123,8 +157,7 @@ function NewTaskModal({ onClose, onSave, assignees }) {
             </div>
           </div>
 
-
-          {/* Notes (Updated to be Task History starting point) */}
+          {/* Notes (Initial Note / Details) */}
           <div className="form-group">
             <label htmlFor="task-notes">Initial Note / Details</label>
             <textarea
@@ -132,6 +165,8 @@ function NewTaskModal({ onClose, onSave, assignees }) {
               rows="3"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
+              // Display a warning if it's an existing note
+              placeholder={task ? "Editing the initial detail note." : ""}
             ></textarea>
           </div>
 
@@ -145,7 +180,7 @@ function NewTaskModal({ onClose, onSave, assignees }) {
               Cancel
             </button>
             <button type="submit" className="btn btn-primary">
-              Save Task
+              {saveButtonText} {/* 👈 DYNAMIC BUTTON TEXT */}
             </button>
           </div>
         </form>

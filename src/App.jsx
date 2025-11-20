@@ -1,11 +1,12 @@
-// App.jsx - UPDATED with Invite Modal Integration
+// App.jsx - UPDATED with Task History Modal Integration
 
 import { useState, useEffect } from 'react';
 import './App.css';
 import NewTaskModal from './components/NewTaskModal';
 import Auth from './components/Auth';
 import HipaaModal from './components/HipaaModal';
-import InviteModal from './components/InviteModal'; // 👈 NEW IMPORT
+import InviteModal from './components/InviteModal'; 
+import TaskHistoryModal from './components/TaskHistoryModal'; // 👈 NEW IMPORT
 import { useAuth } from './AuthContext';
 import { db } from './firebase'; 
 import { 
@@ -14,15 +15,20 @@ import {
   query,          
   orderBy,        
   onSnapshot,
+  doc,             
+  updateDoc,       
 } from 'firebase/firestore'; 
 
 function App() {
   const { currentUser, logout, hasAcceptedHipaa, userProfile } = useAuth(); 
 
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false); // 👈 NEW STATE
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false); 
   const [tasks, setTasks] = useState([]); 
   const [assignees, setAssignees] = useState(['Shelley', 'Sister 1', 'Niece 1']);
+  
+  const [taskToEdit, setTaskToEdit] = useState(null);
+  const [taskToView, setTaskToView] = useState(null); // 👈 NEW STATE for history modal
   
   const currentGroupId = userProfile.groupId;
   const currentUserRole = userProfile.role;
@@ -30,7 +36,6 @@ function App() {
   // Firestore Real-time Listener (Existing)
   useEffect(() => {
     if (currentUser && hasAcceptedHipaa && currentGroupId) {
-      // NOTE: We should eventually filter by groupId here: where("groupId", "==", currentGroupId)
       const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
       const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const tasksArray = [];
@@ -43,46 +48,66 @@ function App() {
     }
   }, [currentUser, hasAcceptedHipaa, currentGroupId]); 
 
-  // handleAddTask function (Existing)
-  const handleAddTask = async (newTask) => {
-    if (!hasAcceptedHipaa) {
-        alert("You must agree to the HIPAA terms before adding tasks.");
+  // Function to open Task History Modal on click
+  const handleTaskClick = (task) => {
+      setTaskToView(task);
+  };
+  
+  const handleEditClick = (task) => {
+    if (currentUserRole !== 'Admin' && currentUserRole !== 'Editor') {
+        alert("Permission Denied: Only Admins and Editors can edit tasks.");
         return;
     }
-    
-    if (!currentGroupId) {
-        alert("System not initialized. Group ID is missing.");
-        return;
-    }
+    setTaskToEdit(task);
+    setIsTaskModalOpen(true);
+  };
+  
+  const handleCloseTaskModal = () => {
+    setIsTaskModalOpen(false);
+    setTaskToEdit(null); // Reset edit state on close
+  };
+
+  // UPDATED: Handles both Add and Update 
+  const handleSave = async (submittedTask) => {
+    if (!hasAcceptedHipaa || !currentGroupId) return;
 
     try {
-      const taskToSave = {
-        title: newTask.title,
-        assignee: newTask.assignee,
-        category: newTask.category,
-        status: newTask.status,
-        dueDate: newTask.dueDate, 
-        updates: newTask.updates, 
-        createdBy: currentUser.email,
-        createdAt: new Date(),
-        groupId: currentGroupId,
+      const dataToSave = {
+        title: submittedTask.title,
+        assignee: submittedTask.assignee,
+        category: submittedTask.category,
+        status: submittedTask.status,
+        dueDate: submittedTask.dueDate, 
+        updates: submittedTask.updates, 
       };
       
-      await addDoc(collection(db, "tasks"), taskToSave);
+      if (submittedTask.id) {
+        // EDIT MODE
+        const taskRef = doc(db, "tasks", submittedTask.id);
+        await updateDoc(taskRef, dataToSave);
+      } else {
+        // CREATE MODE
+        await addDoc(collection(db, "tasks"), {
+          ...dataToSave,
+          createdBy: currentUser.email,
+          createdAt: new Date(),
+          groupId: currentGroupId,
+        });
+      }
 
-      if (!assignees.includes(newTask.assignee)) {
-        setAssignees([...assignees, newTask.assignee])
+      if (!assignees.includes(submittedTask.assignee)) {
+        setAssignees([...assignees, submittedTask.assignee]);
       }
       
-      setIsTaskModalOpen(false)
+      handleCloseTaskModal();
 
     } catch (e) {
-      console.error("Error adding document: ", e);
-      alert("Failed to save task. Check console for details.");
+      console.error(`Error ${submittedTask.id ? 'updating' : 'adding'} document: `, e);
+      alert(`Failed to ${submittedTask.id ? 'update' : 'save'} task. Check console for details.`);
     }
-  }
+  };
   
-  // --- CONDITIONAL RENDERING ---
+  // --- CONDITIONAL RENDERING (Remains the same) ---
   
   if (currentUser && hasAcceptedHipaa === false) {
     return <HipaaModal />;
@@ -97,30 +122,32 @@ function App() {
     <div className="app-container">
       <header className="app-header">
         <h1>ShareCare</h1>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Role: {currentUserRole}</span>
-          
-          {/* Admin/Editor Feature: Invite Button */}
-          {currentUserRole === 'Admin' && (
-            <button
-              className="btn btn-secondary"
-              onClick={() => setIsInviteModalOpen(true)} // 👈 OPEN MODAL
-              title="Invite new users to your hub"
-            >
-              Invite
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Role: {currentUserRole}</span>
+              
+              {currentUserRole === 'Admin' && currentGroupId && (
+                  <button
+                      className="btn btn-secondary"
+                      onClick={() => setIsInviteModalOpen(true)}
+                      title="Invite new users to your hub"
+                  >
+                      Invite
+                  </button>
+              )}
 
-          <button className="btn btn-secondary" onClick={logout}> 
-            Log Out
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => setIsTaskModalOpen(true)}
-          >
-            + Add Task
-          </button>
-        </div>
+              <button className="btn btn-secondary" onClick={logout}> 
+                  Log Out
+              </button>
+              <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    setTaskToEdit(null); 
+                    setIsTaskModalOpen(true);
+                  }}
+              >
+                  + Add Task
+              </button>
+          </div>
       </header>
 
       <main className="task-list-container">
@@ -133,7 +160,13 @@ function App() {
         ) : (
           <ul className="task-list">
             {tasks.map((task) => (
-              <li key={task.id} className="task-item">
+              // 👈 WIRE UP: Task item now responds to click to view history
+              <li 
+                key={task.id} 
+                className="task-item"
+                onClick={() => handleTaskClick(task)} // Opens history modal
+                style={{ cursor: 'pointer' }} // Add visual cue
+              >
                 <div className="task-header">
                     <div className="task-title-group">
                         <strong className="task-title">{task.title}</strong>
@@ -159,11 +192,15 @@ function App() {
                     </div>
                 )}
                 
-                {/* Task Actions (Placeholder for PRD requirement) */}
-                <div className="task-actions-placeholder">
-                    {/* The Edit button is now permission-aware! */}
+                {/* Task Actions: Moved Edit button outside of main click target */}
+                <div className="task-actions-placeholder" onClick={(e) => e.stopPropagation()}>
                     {(currentUserRole === 'Admin' || currentUserRole === 'Editor') && (
-                        <button className="btn btn-secondary btn-small">Edit</button>
+                        <button 
+                            className="btn btn-secondary btn-small"
+                            onClick={() => handleEditClick(task)} 
+                        >
+                            Edit
+                        </button>
                     )}
                 </div>
 
@@ -172,7 +209,8 @@ function App() {
           </ul>
         )}
       </main>
-
+      
+      {/* Footer and Modals */}
       <footer style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.85rem', color: '#666', borderTop: '1px solid #eee', paddingTop: '10px' }}>
           <span style={{ 
               fontWeight: 'bold', 
@@ -187,18 +225,27 @@ function App() {
 
       {isTaskModalOpen && (
         <NewTaskModal
-          onClose={() => setIsTaskModalOpen(false)}
-          onSave={handleAddTask}
+          onClose={handleCloseTaskModal}
+          onSave={handleSave} 
           assignees={assignees} 
+          task={taskToEdit} 
         />
       )}
 
-      {/* NEW: Invite Modal */}
       {isInviteModalOpen && (
         <InviteModal
           onClose={() => setIsInviteModalOpen(false)}
           currentGroupId={currentGroupId}
         />
+      )}
+      
+      {/* 👈 NEW HISTORY MODAL */}
+      {taskToView && (
+          <TaskHistoryModal
+            onClose={() => setTaskToView(null)}
+            task={taskToView}
+            currentUserRole={currentUserRole}
+          />
       )}
     </div>
   )
