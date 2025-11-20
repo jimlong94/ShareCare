@@ -1,18 +1,21 @@
-import { useState } from 'react' // Import useState
+// src/components/NewTaskModal.jsx - UPDATED for DueDate
+
+import { useState } from 'react'
 import './NewTaskModal.css'
 
 // Get the new props (onSave, assignees)
 function NewTaskModal({ onClose, onSave, assignees }) {
-  // --- NEW ---
-  // State for each form field
+  // --- UPDATED STATE ---
   const [title, setTitle] = useState('')
   const [assignee, setAssignee] = useState('')
-  const [category, setCategory] = useState('Appointment') // Default
-  const [status, setStatus] = useState('Delegated') // Default
+  const [category, setCategory] = useState('Appointment')
+  const [status, setStatus] = useState('Delegated')
   const [notes, setNotes] = useState('')
+  const [dueDate, setDueDate] = useState('') // 👈 NEW STATE
+  // ---------------------
 
   const handleSubmit = (e) => {
-    e.preventDefault() // Stop the page from reloading
+    e.preventDefault()
 
     // Simple validation
     if (!title || !assignee) {
@@ -22,18 +25,20 @@ function NewTaskModal({ onClose, onSave, assignees }) {
 
     // Create the new task object
     const newTask = {
-      id: Date.now(), // Simple unique ID
+      // We no longer need a client-side ID as Firestore provides it
       title,
       assignee,
       category,
       status,
-      notes,
+      // 👈 NEW: dueDate is saved (can be an empty string if not set)
+      dueDate: dueDate, 
+      // 👈 UPDATED: notes is packaged as the first item in the 'updates' array
+      updates: notes ? [{ type: 'note', text: notes, timestamp: new Date() }] : [],
     }
 
     // Pass the new task object up to App.jsx
     onSave(newTask)
   }
-  // --- END NEW ---
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -45,8 +50,6 @@ function NewTaskModal({ onClose, onSave, assignees }) {
           </button>
         </div>
 
-        {/* --- UPDATED --- */}
-        {/* Add the onSubmit handler to the form */}
         <form className="modal-form" onSubmit={handleSubmit}>
           {/* Task Title */}
           <div className="form-group">
@@ -60,7 +63,7 @@ function NewTaskModal({ onClose, onSave, assignees }) {
           </div>
 
           <div className="form-row">
-            {/* Assignee - Changed to input + datalist */}
+            {/* Assignee */}
             <div className="form-group">
               <label htmlFor="task-assignee">Assign To</label>
               <input
@@ -68,7 +71,7 @@ function NewTaskModal({ onClose, onSave, assignees }) {
                 type="text"
                 value={assignee}
                 onChange={(e) => setAssignee(e.target.value)}
-                list="assignee-list" // Connects to datalist
+                list="assignee-list"
                 placeholder="Type or select a name"
               />
               <datalist id="assignee-list">
@@ -78,7 +81,7 @@ function NewTaskModal({ onClose, onSave, assignees }) {
               </datalist>
             </div>
 
-            {/* Category - Updated options */}
+            {/* Category */}
             <div className="form-group">
               <label htmlFor="task-category">Category</label>
               <select
@@ -93,23 +96,37 @@ function NewTaskModal({ onClose, onSave, assignees }) {
             </div>
           </div>
 
-          {/* Status - Updated options */}
-          <div className="form-group">
-            <label htmlFor="task-status">Status</label>
-            <select
-              id="task-status"
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="Delegated">Delegated</option>
-              <option value="In progress">In progress</option>
-              <option value="Waiting">Waiting</option>
-            </select>
+          <div className="form-row"> {/* 👈 NEW ROW for Status and DueDate */}
+            {/* Status */}
+            <div className="form-group">
+              <label htmlFor="task-status">Status</label>
+              <select
+                id="task-status"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+              >
+                <option value="Delegated">Delegated</option>
+                <option value="In progress">In progress</option>
+                <option value="Waiting">Waiting</option>
+              </select>
+            </div>
+
+            {/* Due Date */}
+            <div className="form-group">
+              <label htmlFor="task-due-date">Due Date</label>
+              <input
+                id="task-due-date"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+              />
+            </div>
           </div>
 
-          {/* Notes */}
+
+          {/* Notes (Updated to be Task History starting point) */}
           <div className="form-group">
-            <label htmlFor="task-notes">Notes</label>
+            <label htmlFor="task-notes">Initial Note / Details</label>
             <textarea
               id="task-notes"
               rows="3"
@@ -132,7 +149,6 @@ function NewTaskModal({ onClose, onSave, assignees }) {
             </button>
           </div>
         </form>
-        {/* --- END UPDATED --- */}
       </div>
     </div>
   )

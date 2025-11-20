@@ -1,0 +1,10 @@
+node_modules
+# dependencies
+/node_modules
+
+# testing
+/coverage
+
+# build artifacts
+/dist
+.DS_Store
