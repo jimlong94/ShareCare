@@ -162,3 +162,37 @@
   border-top: 1px solid #eee;
   padding-top: 10px;
 }
+
+/* App.css - Task Controls Styles */
+
+.task-controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap; /* Allows controls to wrap on small screens */
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.control-group label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap; /* Prevents labels from breaking */
+}
+
+.task-controls select {
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    background-color: var(--color-white);
+}
+
+/* Make filter/sort controls take up minimal space */
+.task-controls .control-group:first-child select {
+    min-width: 150px; 
+}

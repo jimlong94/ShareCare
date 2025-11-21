@@ -1,4 +1,4 @@
-// App.jsx - UPDATED with Task History Modal Integration
+// src/App.jsx - FINAL COMPLETE VERSION (Includes Filter, Sort, Edit, and Delete)
 
 import { useState, useEffect } from 'react';
 import './App.css';
@@ -6,7 +6,7 @@ import NewTaskModal from './components/NewTaskModal';
 import Auth from './components/Auth';
 import HipaaModal from './components/HipaaModal';
 import InviteModal from './components/InviteModal'; 
-import TaskHistoryModal from './components/TaskHistoryModal'; // 👈 NEW IMPORT
+import TaskHistoryModal from './components/TaskHistoryModal';
 import { useAuth } from './AuthContext';
 import { db } from './firebase'; 
 import { 
@@ -17,6 +17,8 @@ import {
   onSnapshot,
   doc,             
   updateDoc,       
+  where,           
+  deleteDoc,       // 👈 CRITICAL FOR DELETE
 } from 'firebase/firestore'; 
 
 function App() {
@@ -25,33 +27,78 @@ function App() {
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false); 
   const [tasks, setTasks] = useState([]); 
-  const [assignees, setAssignees] = useState(['Shelley', 'Sister 1', 'Niece 1']);
+  
+  // --- STATE FOR CONTROLS ---
+  const [filterAssignee, setFilterAssignee] = useState('All');
+  const [filterCategory, setFilterCategory] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
+  const [sortField, setSortField] = useState('createdAt'); 
+  const [sortDirection, setSortDirection] = useState('desc'); 
+  // --------------------------
+
+  const [assignees, setAssignees] = useState([
+    'Shelley', 
+    'Sister 1', 
+    'Niece 1',
+  ]);
   
   const [taskToEdit, setTaskToEdit] = useState(null);
-  const [taskToView, setTaskToView] = useState(null); // 👈 NEW STATE for history modal
+  const [taskToView, setTaskToView] = useState(null);
   
   const currentGroupId = userProfile.groupId;
   const currentUserRole = userProfile.role;
 
-  // Firestore Real-time Listener (Existing)
+  // --- Firestore Real-time Listener (Dynamic Query) ---
   useEffect(() => {
     if (currentUser && hasAcceptedHipaa && currentGroupId) {
-      const q = query(collection(db, "tasks"), orderBy("createdAt", "desc"));
+      
+      let tasksCollectionRef = collection(db, "tasks");
+      let q = query(tasksCollectionRef);
+
+      // 1. APPLY FILTERS (where clauses)
+      if (filterAssignee !== 'All') {
+          q = query(q, where('assignee', '==', filterAssignee));
+      }
+      if (filterCategory !== 'All') {
+          q = query(q, where('category', '==', filterCategory));
+      }
+      if (filterStatus !== 'All') {
+          q = query(q, where('status', '==', filterStatus));
+      }
+      
+      // 2. APPLY SORTING (orderBy clause)
+      q = query(q, orderBy(sortField, sortDirection));
+
+      // 3. Run the listener
       const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const tasksArray = [];
-        querySnapshot.forEach((doc) => {
-          tasksArray.push({ id: doc.id, ...doc.data() });
+        const currentAssignees = new Set(assignees);
+
+        querySnapshot.forEach((d) => {
+          const taskData = d.data();
+          tasksArray.push({ id: d.id, ...taskData });
+          
+          // Dynamically update assignee list
+          if (taskData.assignee && !currentAssignees.has(taskData.assignee)) {
+            currentAssignees.add(taskData.assignee);
+          }
         });
+        
+        const newAssigneesArray = Array.from(currentAssignees);
+        if (newAssigneesArray.length !== assignees.length) {
+            setAssignees(newAssigneesArray);
+        }
+        
         setTasks(tasksArray);
       });
       return () => unsubscribe();
     }
-  }, [currentUser, hasAcceptedHipaa, currentGroupId]); 
+    
+  }, [currentUser, hasAcceptedHipaa, currentGroupId, filterAssignee, filterCategory, filterStatus, sortField, sortDirection, assignees.length]); // Added assignees.length to dependencies
 
-  // Function to open Task History Modal on click
-  const handleTaskClick = (task) => {
-      setTaskToView(task);
-  };
+  // --- Functionality Handlers ---
+  
+  const handleTaskClick = (task) => { setTaskToView(task); };
   
   const handleEditClick = (task) => {
     if (currentUserRole !== 'Admin' && currentUserRole !== 'Editor') {
@@ -62,12 +109,30 @@ function App() {
     setIsTaskModalOpen(true);
   };
   
+  const handleDelete = async (taskId, taskTitle) => {
+    if (currentUserRole !== 'Admin' && currentUserRole !== 'Editor') {
+        alert("Permission Denied: Only Admins and Editors can delete tasks.");
+        return;
+    }
+
+    if (!window.confirm(`Are you sure you want to delete the task: "${taskTitle}"? This cannot be undone.`)) {
+        return;
+    }
+    
+    try {
+        const taskRef = doc(db, "tasks", taskId);
+        await deleteDoc(taskRef);
+    } catch (e) {
+        console.error("Error deleting document: ", e);
+        alert("Failed to delete task. Check console for details.");
+    }
+  };
+  
   const handleCloseTaskModal = () => {
     setIsTaskModalOpen(false);
-    setTaskToEdit(null); // Reset edit state on close
+    setTaskToEdit(null);
   };
 
-  // UPDATED: Handles both Add and Update 
   const handleSave = async (submittedTask) => {
     if (!hasAcceptedHipaa || !currentGroupId) return;
 
@@ -82,21 +147,15 @@ function App() {
       };
       
       if (submittedTask.id) {
-        // EDIT MODE
         const taskRef = doc(db, "tasks", submittedTask.id);
         await updateDoc(taskRef, dataToSave);
       } else {
-        // CREATE MODE
         await addDoc(collection(db, "tasks"), {
           ...dataToSave,
           createdBy: currentUser.email,
           createdAt: new Date(),
           groupId: currentGroupId,
         });
-      }
-
-      if (!assignees.includes(submittedTask.assignee)) {
-        setAssignees([...assignees, submittedTask.assignee]);
       }
       
       handleCloseTaskModal();
@@ -107,8 +166,7 @@ function App() {
     }
   };
   
-  // --- CONDITIONAL RENDERING (Remains the same) ---
-  
+  // --- Dropdown/Rendering Data ---
   if (currentUser && hasAcceptedHipaa === false) {
     return <HipaaModal />;
   }
@@ -117,7 +175,11 @@ function App() {
     return <Auth />;
   }
   
-  // Show main app 
+  const uniqueAssignees = ['All', ...assignees.filter(a => a)]; 
+  const categories = ['All', 'Appointment', 'Household', 'Misc'];
+  const statuses = ['All', 'Delegated', 'In progress', 'Waiting'];
+  
+  // --- Render ---
   return (
     <div className="app-container">
       <header className="app-header">
@@ -151,6 +213,62 @@ function App() {
       </header>
 
       <main className="task-list-container">
+        {/* --- Task Controls UI --- */}
+        <div className="task-controls">
+            {/* Filter Assignee */}
+            <div className="control-group">
+                <label htmlFor="filter-assignee">Filter By:</label>
+                <select
+                    id="filter-assignee"
+                    value={filterAssignee}
+                    onChange={(e) => setFilterAssignee(e.target.value)}
+                >
+                    {uniqueAssignees.map(a => (
+                        <option key={a} value={a}>{a === 'All' ? 'Assignee (All)' : a}</option>
+                    ))}
+                </select>
+            </div>
+            
+            {/* Filter Category */}
+            <div className="control-group">
+                <select
+                    id="filter-category"
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                >
+                    {categories.map(c => (
+                         <option key={c} value={c}>{c === 'All' ? 'Category (All)' : c}</option>
+                    ))}
+                </select>
+            </div>
+
+            {/* Sort Controls */}
+            <div className="control-group">
+                <label htmlFor="sort-field">Sort By:</label>
+                <select
+                    id="sort-field"
+                    value={sortField}
+                    onChange={(e) => setSortField(e.target.value)}
+                >
+                    <option value="createdAt">Date Created</option>
+                    <option value="dueDate">Due Date</option>
+                    <option value="assignee">Assignee Name</option>
+                </select>
+            </div>
+             <div className="control-group">
+                <select
+                    id="sort-direction"
+                    value={sortDirection}
+                    onChange={(e) => setSortDirection(e.target.value)}
+                >
+                    <option value="desc">Descending</option>
+                    <option value="asc">Ascending</option>
+                </select>
+            </div>
+        </div>
+        {/* --- END: Task Controls UI --- */}
+
+
         <h2>Tasks (Hub ID: {currentGroupId} | Role: {currentUserRole})</h2> 
         
         {tasks.length === 0 ? (
@@ -160,12 +278,11 @@ function App() {
         ) : (
           <ul className="task-list">
             {tasks.map((task) => (
-              // 👈 WIRE UP: Task item now responds to click to view history
               <li 
                 key={task.id} 
                 className="task-item"
-                onClick={() => handleTaskClick(task)} // Opens history modal
-                style={{ cursor: 'pointer' }} // Add visual cue
+                onClick={() => handleTaskClick(task)} 
+                style={{ cursor: 'pointer' }} 
               >
                 <div className="task-header">
                     <div className="task-title-group">
@@ -192,15 +309,28 @@ function App() {
                     </div>
                 )}
                 
-                {/* Task Actions: Moved Edit button outside of main click target */}
+                {/* Task Actions (WIRED DELETE BUTTON) */}
                 <div className="task-actions-placeholder" onClick={(e) => e.stopPropagation()}>
                     {(currentUserRole === 'Admin' || currentUserRole === 'Editor') && (
-                        <button 
-                            className="btn btn-secondary btn-small"
-                            onClick={() => handleEditClick(task)} 
-                        >
-                            Edit
-                        </button>
+                        <>
+                            <button 
+                                className="btn btn-secondary btn-small"
+                                onClick={() => handleEditClick(task)} 
+                                style={{ marginRight: '8px' }}
+                            >
+                                Edit
+                            </button>
+                            <button 
+                                className="btn btn-danger btn-small"
+                                onClick={(e) => {
+                                    e.stopPropagation(); 
+                                    handleDelete(task.id, task.title);
+                                }}
+                                style={{ backgroundColor: 'var(--color-danger)', color: 'var(--color-white)' }}
+                            >
+                                Delete
+                            </button>
+                        </>
                     )}
                 </div>
 
@@ -239,7 +369,6 @@ function App() {
         />
       )}
       
-      {/* 👈 NEW HISTORY MODAL */}
       {taskToView && (
           <TaskHistoryModal
             onClose={() => setTaskToView(null)}
