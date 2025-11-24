@@ -1,7 +1,7 @@
 // src/components/TaskHistoryModal.jsx - FINAL FIX for Dynamic Update
 
 import React, { useState } from 'react';
-import './NewTaskModal.css';
+//import './NewTaskModal.css';
 import { useAuth } from '../AuthContext'; 
 import { db } from '../firebase';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';

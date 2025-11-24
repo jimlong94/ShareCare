@@ -1,7 +1,7 @@
 // src/components/InviteModal.jsx
 
 import React, { useState } from 'react';
-import './NewTaskModal.css'; // Reusing modal styles
+//import './NewTaskModal.css'; // Reusing modal styles
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';

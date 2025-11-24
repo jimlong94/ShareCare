@@ -1,4 +1,4 @@
-// src/AuthContext.jsx - FINAL FIX (Implements Wait/Poll for Profile Completion)
+// src/AuthContext.jsx - FIXED & CONSOLIDATED
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
@@ -7,7 +7,7 @@ import {
   signInWithEmailAndPassword, 
   signOut 
 } from 'firebase/auth'; 
-import { doc, getDoc, setDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore'; 
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'; 
 import { auth, db } from './firebase';
 
 const AuthContext = createContext();
@@ -33,12 +33,13 @@ const waitForProfileCompletion = async (userRef) => {
     });
 };
 
-
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [hasAcceptedHipaa, setHasAcceptedHipaa] = useState(null); 
   const [userProfile, setUserProfile] = useState({ groupId: null, role: null });
+
+  // --- Auth Actions ---
 
   const signup = async (email, password) => { 
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -63,23 +64,33 @@ export const AuthProvider = ({ children }) => {
     return signOut(auth);
   };
 
-  const saveHipaaAcceptance = async () => {
+  const completeOnboarding = async () => {
     if (currentUser && currentUser.uid) {
       const userRef = doc(db, "users", currentUser.uid);
-      await setDoc(userRef, { 
-        hipaaAccepted: true,
-        hipaaAcceptedAt: new Date(),
-      }, { merge: true }); 
+      const timestamp = new Date();
+      
+      // Write specific timestamps for audit trails as per PRD
+      await updateDoc(userRef, { 
+        hipaaAccepted: true, 
+        onboardingCompletedAt: timestamp,
+        consents: {
+            termsAcceptedAt: timestamp,
+            dataCollectionConsentAt: timestamp,
+            groupSharingConsentAt: timestamp
+        }
+      }); 
+      
       setHasAcceptedHipaa(true); 
     }
   };
 
-  // --- FINAL CORRECTED LOGIC: Loads profile and WAITS for Auth.jsx to finish ---
+  // --- Profile Loading Logic ---
+
   const loadProfileAndSetupGroup = async (user) => {
     const userRef = doc(db, "users", user.uid);
     let docSnap = await getDoc(userRef);
 
-    // If the document does not exist, we return (should only happen if sign-up is running)
+    // If the document does not exist, return (should only happen during mid-signup)
     if (!docSnap.exists()) {
         setHasAcceptedHipaa(false);
         setUserProfile({ groupId: null, role: null });
@@ -88,14 +99,14 @@ export const AuthProvider = ({ children }) => {
     
     let finalData;
 
-    // 🚨 CRITICAL FIX: If profile is not complete, wait for it using polling
+    // CRITICAL FIX: If profile is not complete, wait for it using polling
     if (!docSnap.data()?.isProfileComplete) {
         finalData = await waitForProfileCompletion(userRef);
     } else {
         finalData = docSnap.data();
     }
     
-    // --- Safely read the finalized data ---
+    // Safely read the finalized data
     let currentGroupId = finalData.groupId || null;
     let userRole = finalData.role || null;
     let hipaaAccepted = finalData.hipaaAccepted === true;
@@ -103,11 +114,10 @@ export const AuthProvider = ({ children }) => {
     // Set final states for rendering
     setHasAcceptedHipaa(hipaaAccepted);
     setUserProfile({ groupId: currentGroupId, role: userRole });
-};
-  // -------------------------------------------------------------------
+  };
 
-
-  // Set up Firebase Auth State Listener
+  // --- Auth State Listener ---
+  
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
@@ -125,13 +135,15 @@ export const AuthProvider = ({ children }) => {
     return unsubscribe;
   }, []);
 
+  // --- Export Value ---
+
   const value = {
     currentUser,
     signup, 
     login,  
     logout, 
     hasAcceptedHipaa, 
-    saveHipaaAcceptance, 
+    completeOnboarding, // Exporting the new correct function
     userProfile, 
   };
 
