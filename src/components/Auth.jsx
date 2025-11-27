@@ -1,9 +1,10 @@
-// src/components/Auth.jsx - FINAL FIX (Resolves AdminId Undefined Error)
+// src/components/Auth.jsx - TAILWIND EDITION
 
 import { useState } from 'react';
 import { useAuth } from '../AuthContext'; 
 import { db } from '../firebase';
 import { doc, getDoc, updateDoc, collection, addDoc } from 'firebase/firestore'; 
+import { LogIn, UserPlus, ShieldCheck } from 'lucide-react'; // Icons for trust
 
 function Auth() {
   const [isLoginView, setIsLoginView] = useState(true); 
@@ -15,34 +16,18 @@ function Auth() {
   
   const { signup, login } = useAuth(); 
 
-  const primaryButtonText = isLoginView ? 'Login' : 'Sign Up';
-  const toggleLinkText = isLoginView ? 'Need an account? Sign Up' : 'Have an account? Log In';
-
   const validateInviteCode = async (code) => {
     if (!code) return null;
-
     try {
       const inviteRef = doc(db, "invites", code);
       const inviteSnap = await getDoc(inviteRef);
 
-      if (!inviteSnap.exists()) {
-        setError('Invalid invite code.');
-        return null;
-      }
-      
+      if (!inviteSnap.exists()) { setError('Invalid invite code.'); return null; }
       const data = inviteSnap.data();
-      
-      if (data.status !== 'pending') {
-        setError('Invite code has already been used.');
-        return null;
-      }
-      if (data.expiresAt.toDate() < new Date()) {
-        setError('Invite code has expired.');
-        return null;
-      }
+      if (data.status !== 'pending') { setError('Invite code has already been used.'); return null; }
+      if (data.expiresAt.toDate() < new Date()) { setError('Invite code has expired.'); return null; }
 
       return { groupId: data.groupId, role: data.invitedRole };
-
     } catch (e) {
       console.error("Invite validation error:", e);
       setError('An error occurred during validation.');
@@ -53,11 +38,7 @@ function Auth() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    
-    if (!email || !password) {
-      setError('Email and password are required.');
-      return;
-    }
+    if (!email || !password) { setError('Email and password are required.'); return; }
     
     setLoading(true);
 
@@ -66,34 +47,24 @@ function Auth() {
         await login(email, password); 
       } else {
         // --- SIGNUP FLOW ---
-        
         let validInvite = null;
         let targetGroupId, targetRole;
         
-        // 1. Validate Invite Code (If provided)
         if (inviteCode) {
             validInvite = await validateInviteCode(inviteCode);
-            if (!validInvite) {
-                setLoading(false);
-                return;
-            }
+            if (!validInvite) { setLoading(false); return; }
             targetGroupId = validInvite.groupId;
             targetRole = validInvite.role;
-
         } else {
-            // SCENARIO 2 Setup: User is New Admin.
-            targetGroupId = null; // Will be created after signup
+            targetGroupId = null; 
             targetRole = "Admin";
         }
         
-        // 2. Execute Signup (AuthContext creates the base user doc)
         const userCredential = await signup(email, password);
         const userId = userCredential.user.uid;
         const userEmail = userCredential.user.email;
 
-        // 3. CRITICAL: Group creation MUST happen AFTER signup/auth.
         if (!validInvite) {
-            // Only run if it's the NEW ADMIN case (not an invited user)
             const newGroupRef = await addDoc(collection(db, "groups"), {
                 name: `${userEmail}'s Care Hub`,
                 adminId: userId, 
@@ -102,26 +73,18 @@ function Auth() {
             targetGroupId = newGroupRef.id;
         }
         
-        // 4. Build Final Profile Data
         const profileData = {
             groupId: targetGroupId,
             role: targetRole,
-            isProfileComplete: true, // Set this LAST
+            isProfileComplete: true, 
         };
         
-        // 🚨 FIX: Only include the adminId field if the role is Admin.
-        if (targetRole === "Admin") {
-            profileData.adminId = userId;
-        }
+        if (targetRole === "Admin") profileData.adminId = userId;
 
-        // 5. Update User Profile (Single, decisive write)
-        const userRef = doc(db, "users", userId);
-        await updateDoc(userRef, profileData);
+        await updateDoc(doc(db, "users", userId), profileData);
         
-        // 6. Mark Invite as Used (if applicable)
         if (validInvite) {
-            const inviteRef = doc(db, "invites", inviteCode);
-            await updateDoc(inviteRef, {
+            await updateDoc(doc(db, "invites", inviteCode), {
                 status: 'used',
                 usedBy: userEmail,
                 usedAt: new Date(),
@@ -130,80 +93,103 @@ function Auth() {
       }
     } catch (firebaseError) {
       console.error(firebaseError);
-      alert("Signup or Group Creation Failed. See console for details.");
-      setError('Authentication Failed. Please check your credentials or try again.');
+      setError('Authentication Failed. Please check your credentials.');
     } finally {
       setLoading(false);
     }
   };
 
+  const inputClass = "w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-btn text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:bg-white transition-all";
+  const labelClass = "block text-sm font-bold text-slate-700 mb-1.5 ml-1";
+
   return (
-    <div className="auth-container app-container">
-      <h1>{isLoginView ? 'Welcome Back!' : 'Join ShareCare'}</h1>
-      
-      <form onSubmit={handleSubmit} className="auth-form">
-        {error && <p className="error-message" style={{ color: 'var(--color-danger)', border: '1px solid var(--color-danger)', padding: '10px', borderRadius: '4px' }}>{error}</p>}
-
-        <div className="form-group">
-          <label htmlFor="auth-email">Email</label>
-          <input
-            id="auth-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
-
-        <div className="form-group">
-          <label htmlFor="auth-password">Password</label>
-          <input
-            id="auth-password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-card shadow-xl w-full max-w-md p-8 border border-slate-100 animate-in fade-in zoom-in-95 duration-300">
         
-        {!isLoginView && (
-            <div className="form-group">
-                <label htmlFor="invite-code">
-                    If you were invited with a code, please insert it here (Optional)
-                </label>
+        <div className="text-center mb-8">
+            <div className="inline-flex p-3 bg-teal-50 text-teal-600 rounded-full mb-3">
+                <ShieldCheck size={32} />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+                {isLoginView ? 'Welcome Back' : 'Join ShareCare'}
+            </h1>
+            <p className="text-slate-500 text-sm mt-1">
+                {isLoginView ? 'Sign in to coordinate care.' : 'Create your secure family hub.'}
+            </p>
+        </div>
+      
+        <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+                <div className="bg-rose-50 text-rose-600 p-3 rounded-btn text-sm font-medium border border-rose-100 text-center">
+                    {error}
+                </div>
+            )}
+
+            <div>
+                <label htmlFor="auth-email" className={labelClass}>Email Address</label>
                 <input
-                    id="invite-code"
-                    type="text"
-                    value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value)}
-                    placeholder="Invitation Code (e.g., aDDt56vJ7ZMIxDAaVyoU)"
+                    id="auth-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={inputClass}
+                    placeholder="name@example.com"
+                    autoFocus
                 />
             </div>
-        )}
 
-        <button 
-          type="submit" 
-          className="btn btn-primary" 
-          disabled={loading}
-        >
-          {loading ? 'Loading...' : primaryButtonText}
-        </button>
+            <div>
+                <label htmlFor="auth-password" className={labelClass}>Password</label>
+                <input
+                    id="auth-password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={inputClass}
+                    placeholder="••••••••"
+                />
+            </div>
+            
+            {!isLoginView && (
+                <div className="pt-2 border-t border-slate-100 mt-2">
+                    <label htmlFor="invite-code" className={labelClass}>
+                        Invitation Code <span className="text-slate-400 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                        id="invite-code"
+                        type="text"
+                        value={inviteCode}
+                        onChange={(e) => setInviteCode(e.target.value)}
+                        className={`${inputClass} font-mono text-sm`}
+                        placeholder="Paste code here..."
+                    />
+                </div>
+            )}
 
-        <p style={{ marginTop: '1rem', textAlign: 'center' }}>
-          <a 
-            href="#" 
-            onClick={(e) => {
-              e.preventDefault();
-              setIsLoginView(!isLoginView);
-              setError('');
-              setInviteCode(''); 
-              setEmail('');
-              setPassword('');
-            }}
-            style={{ color: 'var(--color-primary)' }}
-          >
-            {toggleLinkText}
-          </a>
-        </p>
-      </form>
+            <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3.5 rounded-btn shadow-soft transition-transform active:scale-95 flex items-center justify-center gap-2 mt-4"
+            >
+                {loading ? 'Processing...' : (isLoginView ? <><LogIn size={18}/> Log In</> : <><UserPlus size={18}/> Create Account</>)}
+            </button>
+
+            <div className="text-center mt-6">
+                <button 
+                    type="button"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        setIsLoginView(!isLoginView);
+                        setError('');
+                        setInviteCode(''); 
+                    }}
+                    className="text-slate-500 hover:text-teal-600 text-sm font-medium transition-colors"
+                >
+                    {isLoginView ? "Don't have an account? Sign Up" : "Already have an account? Log In"}
+                </button>
+            </div>
+        </form>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
-// src/App.jsx - TAILWIND EDITION
+// src/App.jsx - FINAL INTEGRATED VERSION
 
 import { useState, useEffect } from 'react';
+import Dashboard from './components/Dashboard';
 import NewTaskModal from './components/NewTaskModal';
 import Auth from './components/Auth';
 import OnboardingWizard from './components/OnboardingWizard';
@@ -9,6 +10,8 @@ import TaskHistoryModal from './components/TaskHistoryModal';
 import KeyInfo from './components/KeyInfo'; 
 import WellnessCenter from './components/WellnessCenter';
 import TaskCard from './components/TaskCard'; 
+import GroupSettingsModal from './components/GroupSettingsModal'; 
+import NoGroupState from './components/NoGroupState'; 
 
 import { useAuth } from './AuthContext';
 import { db } from './firebase'; 
@@ -23,40 +26,56 @@ import {
   where,           
   deleteDoc,       
 } from 'firebase/firestore'; 
+import { Users } from 'lucide-react'; 
 
 function App() {
   const { currentUser, logout, hasAcceptedHipaa, userProfile } = useAuth(); 
 
+  // --- UI State ---
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false); 
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false); 
+  const [taskToEdit, setTaskToEdit] = useState(null);
+  const [taskToView, setTaskToView] = useState(null);
+
+  // --- Data State ---
   const [tasks, setTasks] = useState([]); 
+  const [members, setMembers] = useState([]); 
   
-  // Navigation & View State
-  const [currentView, setCurrentView] = useState('tasks'); 
-  
-  // Filter & Sort State
+  // --- Navigation & Filters ---
+  const [currentView, setCurrentView] = useState('dashboard');
   const [filterAssignee, setFilterAssignee] = useState('All');
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
   const [sortField, setSortField] = useState('createdAt'); 
   const [sortDirection, setSortDirection] = useState('desc'); 
 
-  const [assignees, setAssignees] = useState(['Shelley', 'Sister 1', 'Niece 1']);
-  
-  const [taskToEdit, setTaskToEdit] = useState(null);
-  const [taskToView, setTaskToView] = useState(null);
-  
   const currentGroupId = userProfile.groupId;
   const currentUserRole = userProfile.role;
 
-  // --- Real-time Listener ---
+  // --- 1. Fetch Real Group Members ---
+  useEffect(() => {
+    if (currentUser && currentGroupId) {
+      const q = query(collection(db, "users"), where('groupId', '==', currentGroupId));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const memberList = snapshot.docs.map(doc => {
+          const data = doc.data();
+          // Fallback: Use email prefix if no display name exists
+          const name = data.displayName || data.email.split('@')[0]; 
+          return { id: doc.id, name, email: data.email, role: data.role };
+        });
+        setMembers(memberList);
+      });
+      return () => unsubscribe();
+    }
+  }, [currentUser, currentGroupId]);
+
+  // --- 2. Fetch Tasks ---
   useEffect(() => {
     if (currentUser && hasAcceptedHipaa && currentGroupId) {
-      
       let tasksCollectionRef = collection(db, "tasks");
       let q = query(tasksCollectionRef, where('groupId', '==', currentGroupId)); 
 
-      if (filterAssignee !== 'All') q = query(q, where('assignee', '==', filterAssignee));
       if (filterCategory !== 'All') q = query(q, where('category', '==', filterCategory));
       if (filterStatus !== 'All') q = query(q, where('status', '==', filterStatus));
       
@@ -64,24 +83,20 @@ function App() {
 
       const unsubscribe = onSnapshot(q, (querySnapshot) => {
         const tasksArray = [];
-        const assigneeSet = new Set(assignees);
-
         querySnapshot.forEach((d) => {
-          const taskData = d.data();
-          tasksArray.push({ id: d.id, ...taskData });
-          if (taskData.assignee && !assigneeSet.has(taskData.assignee)) {
-            assigneeSet.add(taskData.assignee);
-          }
+          tasksArray.push({ id: d.id, ...d.data() });
         });
         
-        if (assigneeSet.size !== assignees.length) {
-            setAssignees(Array.from(assigneeSet));
+        // Handle Assignee Filter in memory (supports ID or Name)
+        if (filterAssignee !== 'All') {
+            setTasks(tasksArray.filter(t => t.assignee === filterAssignee || t.assigneeId === filterAssignee));
+        } else {
+            setTasks(tasksArray);
         }
-        setTasks(tasksArray);
       });
       return () => unsubscribe();
     }
-  }, [currentUser, hasAcceptedHipaa, currentGroupId, filterAssignee, filterCategory, filterStatus, sortField, sortDirection, assignees.length]); 
+  }, [currentUser, hasAcceptedHipaa, currentGroupId, filterAssignee, filterCategory, filterStatus, sortField, sortDirection]); 
 
   // --- Handlers ---
   const handleTaskClick = (task) => { setTaskToView(task); };
@@ -110,7 +125,8 @@ function App() {
     try {
       const dataToSave = {
         title: submittedTask.title,
-        assignee: submittedTask.assignee,
+        assignee: submittedTask.assignee,     
+        assigneeId: submittedTask.assigneeId, 
         category: submittedTask.category,
         status: submittedTask.status,
         dueDate: submittedTask.dueDate, 
@@ -131,11 +147,20 @@ function App() {
     } catch (e) { console.error(e); alert("Save failed."); }
   };
   
-  // --- Render ---
-  if (currentUser && hasAcceptedHipaa === false) return <OnboardingWizard />;
-  if (!currentUser) return <Auth />;
+  // --- RENDER LOGIC ---
   
-  const uniqueAssignees = ['All', ...assignees.filter(a => a)]; 
+  // 1. Auth Check
+  if (!currentUser) return <Auth />;
+
+  // 2. Onboarding Check
+  if (hasAcceptedHipaa === false) return <OnboardingWizard />;
+
+  // 3. 🛑 Orphaned User Check (No Group) 🛑
+  if (!currentGroupId) {
+      return <NoGroupState />;
+  }
+  
+  // 4. Normal App Render
   const categories = ['All', 'Appointment', 'Household', 'Misc'];
 
   return (
@@ -150,9 +175,8 @@ function App() {
             <div className="flex flex-col items-center md:items-start gap-3 w-full md:w-auto">
               <h1 className="text-2xl font-bold text-teal-600 tracking-tight">ShareCare</h1>
               
-              {/* Navigation Tabs */}
               <div className="flex p-1 bg-slate-100 rounded-lg">
-                {['tasks', 'keyinfo', 'wellness'].map(view => (
+                {['dashboard', 'tasks', 'keyinfo', 'wellness'].map(view => (
                     <button 
                       key={view}
                       onClick={() => setCurrentView(view)}
@@ -173,14 +197,27 @@ function App() {
             <div className="flex flex-col items-end gap-2 w-full md:w-auto">
                 <div className="flex items-center gap-3 text-sm">
                     <span className="text-slate-400 font-medium">{currentUserRole}</span>
+                    
+                    {/* ADMIN CONTROLS */}
                     {currentUserRole === 'Admin' && currentGroupId && (
-                        <button 
-                          onClick={() => setIsInviteModalOpen(true)}
-                          className="text-slate-600 hover:text-teal-600 font-medium underline decoration-slate-300 underline-offset-4"
-                        >
-                          Invite
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button 
+                              onClick={() => setIsSettingsOpen(true)}
+                              className="text-slate-500 hover:text-teal-600 p-1 rounded hover:bg-slate-100 transition-colors"
+                              title="Manage Team"
+                            >
+                              <Users size={18} />
+                            </button>
+                            <span className="text-slate-300">|</span>
+                            <button 
+                              onClick={() => setIsInviteModalOpen(true)}
+                              className="text-slate-600 hover:text-teal-600 font-medium underline decoration-slate-300 underline-offset-4"
+                            >
+                              Invite
+                            </button>
+                        </div>
                     )}
+
                     <button 
                       onClick={logout}
                       className="text-slate-400 hover:text-rose-500 transition-colors"
@@ -205,6 +242,16 @@ function App() {
       {/* --- MAIN CONTENT --- */}
       <main className="max-w-5xl mx-auto px-4 py-8 md:px-6">
         
+        {/* VIEW 0: DASHBOARD */}
+        {currentView === 'dashboard' && (
+          <Dashboard 
+            tasks={tasks} 
+            currentUser={currentUser} 
+            members={members}
+            onViewChange={setCurrentView} 
+          />
+        )}
+
         {/* VIEW 1: TASK BOARD */}
         {currentView === 'tasks' && (
           <div className="space-y-6">
@@ -216,7 +263,10 @@ function App() {
                   value={filterAssignee} 
                   onChange={(e) => setFilterAssignee(e.target.value)}
                 >
-                    {uniqueAssignees.map(a => <option key={a} value={a}>{a === 'All' ? 'Assignee (All)' : a}</option>)}
+                    <option value="All">All Assignees</option>
+                    {members.map(m => (
+                        <option key={m.id} value={m.name}>{m.name}</option>
+                    ))}
                 </select>
 
                 <select 
@@ -251,7 +301,7 @@ function App() {
             {/* THE GRID */}
             {tasks.length === 0 ? (
               <div className="text-center py-20 bg-white border-2 border-dashed border-slate-200 rounded-card">
-                <p className="text-slate-400 font-medium">No tasks found. Time to relax? 🌴</p>
+                <p className="text-slate-400 font-medium">No tasks found.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -279,11 +329,12 @@ function App() {
       </main>
       
       {/* Modals */}
-      {isTaskModalOpen && <NewTaskModal onClose={handleCloseTaskModal} onSave={handleSave} assignees={assignees} task={taskToEdit} />}
+      {isTaskModalOpen && <NewTaskModal onClose={handleCloseTaskModal} onSave={handleSave} members={members} task={taskToEdit} />}
       {isInviteModalOpen && <InviteModal onClose={() => setIsInviteModalOpen(false)} currentGroupId={currentGroupId} />}
+      {isSettingsOpen && <GroupSettingsModal onClose={() => setIsSettingsOpen(false)} />}
       {taskToView && <TaskHistoryModal onClose={() => setTaskToView(null)} task={taskToView} currentUserRole={currentUserRole} />}
     </div>
   )
 }
 
-export default App
+export default App;

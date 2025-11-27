@@ -1,4 +1,4 @@
-// src/AuthContext.jsx - FIXED & CONSOLIDATED
+// src/AuthContext.jsx - REAL-TIME SYNC EDITION
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
@@ -7,7 +7,7 @@ import {
   signInWithEmailAndPassword, 
   signOut 
 } from 'firebase/auth'; 
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'; 
+import { doc, setDoc, onSnapshot } from 'firebase/firestore'; 
 import { auth, db } from './firebase';
 
 const AuthContext = createContext();
@@ -16,26 +16,11 @@ export const useAuth = () => {
   return useContext(AuthContext);
 };
 
-// Helper function to wait for the completion flag
-const waitForProfileCompletion = async (userRef) => {
-    return new Promise(resolve => {
-        const check = async () => {
-            const docSnap = await getDoc(userRef);
-            if (docSnap.exists() && docSnap.data().isProfileComplete) {
-                // Profile is complete! Resolve with the final data.
-                resolve(docSnap.data());
-            } else {
-                // Not complete yet, check again in 500ms
-                setTimeout(check, 500);
-            }
-        };
-        check();
-    });
-};
-
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // These now update instantly when Firestore changes
   const [hasAcceptedHipaa, setHasAcceptedHipaa] = useState(null); 
   const [userProfile, setUserProfile] = useState({ groupId: null, role: null });
 
@@ -45,10 +30,11 @@ export const AuthProvider = ({ children }) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
-    // CRITICAL: Initialize the user's Firestore document immediately.
+    // Create the initial shell document immediately
     await setDoc(doc(db, "users", user.uid), {
         email: user.email,
         createdAt: new Date(),
+        isProfileComplete: false // Mark as incomplete initially
     }, { merge: true }); 
 
     return userCredential;
@@ -59,8 +45,6 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    setHasAcceptedHipaa(null);
-    setUserProfile({ groupId: null, role: null }); 
     return signOut(auth);
   };
 
@@ -69,73 +53,69 @@ export const AuthProvider = ({ children }) => {
       const userRef = doc(db, "users", currentUser.uid);
       const timestamp = new Date();
       
-      // Write specific timestamps for audit trails as per PRD
-      await updateDoc(userRef, { 
+      // We set specific flags that the UI listens for
+      await setDoc(userRef, { 
         hipaaAccepted: true, 
         onboardingCompletedAt: timestamp,
+        isProfileComplete: true, // This flag helps verify readiness
         consents: {
             termsAcceptedAt: timestamp,
             dataCollectionConsentAt: timestamp,
             groupSharingConsentAt: timestamp
         }
-      }); 
-      
-      setHasAcceptedHipaa(true); 
+      }, { merge: true }); 
+      // No need to manually set state here; the listener below will do it automatically
     }
   };
 
-  // --- Profile Loading Logic ---
-
-  const loadProfileAndSetupGroup = async (user) => {
-    const userRef = doc(db, "users", user.uid);
-    let docSnap = await getDoc(userRef);
-
-    // If the document does not exist, return (should only happen during mid-signup)
-    if (!docSnap.exists()) {
-        setHasAcceptedHipaa(false);
-        setUserProfile({ groupId: null, role: null });
-        return; 
-    }
-    
-    let finalData;
-
-    // CRITICAL FIX: If profile is not complete, wait for it using polling
-    if (!docSnap.data()?.isProfileComplete) {
-        finalData = await waitForProfileCompletion(userRef);
-    } else {
-        finalData = docSnap.data();
-    }
-    
-    // Safely read the finalized data
-    let currentGroupId = finalData.groupId || null;
-    let userRole = finalData.role || null;
-    let hipaaAccepted = finalData.hipaaAccepted === true;
-    
-    // Set final states for rendering
-    setHasAcceptedHipaa(hipaaAccepted);
-    setUserProfile({ groupId: currentGroupId, role: userRole });
-  };
-
-  // --- Auth State Listener ---
+  // --- Real-Time Listener Logic ---
   
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribeProfile = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       
       if (user) {
-        // Must wait for profile loading before rendering App.jsx
-        await loadProfileAndSetupGroup(user); 
+        // 1. User is logged in. START LISTENING to their Firestore Profile.
+        const userRef = doc(db, "users", user.uid);
+        
+        unsubscribeProfile = onSnapshot(userRef, (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                
+                // Real-time updates to global state
+                setHasAcceptedHipaa(data.hipaaAccepted === true);
+                setUserProfile({ 
+                    groupId: data.groupId || null, 
+                    role: data.role || null,
+                    name: data.displayName || null
+                });
+            } else {
+                // Self-Healing: If doc is missing (rare), create a hollow one
+                setDoc(userRef, { email: user.email, createdAt: new Date() }, { merge: true });
+            }
+            setLoading(false); // We have data, app can load
+        }, (error) => {
+            console.error("Profile Sync Error:", error);
+            setLoading(false); // Prevent infinite loading screen on error
+        });
+
       } else {
+        // 2. User logged out. STOP LISTENING and reset state.
+        if (unsubscribeProfile) unsubscribeProfile();
         setHasAcceptedHipaa(null);
         setUserProfile({ groupId: null, role: null });
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return unsubscribe;
+    // Cleanup on unmount
+    return () => {
+        unsubscribeAuth();
+        if (unsubscribeProfile) unsubscribeProfile();
+    };
   }, []);
-
-  // --- Export Value ---
 
   const value = {
     currentUser,
@@ -143,13 +123,13 @@ export const AuthProvider = ({ children }) => {
     login,  
     logout, 
     hasAcceptedHipaa, 
-    completeOnboarding, // Exporting the new correct function
+    completeOnboarding, 
     userProfile, 
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading ? children : <div>Loading...</div>} 
+      {!loading ? children : <div className="p-10 text-center text-slate-500">Loading ShareCare...</div>} 
     </AuthContext.Provider>
   );
 };
