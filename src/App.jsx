@@ -57,15 +57,21 @@ function App() {
   useEffect(() => {
     if (currentUser && currentGroupId) {
       const q = query(collection(db, "users"), where('groupId', '==', currentGroupId));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const memberList = snapshot.docs.map(doc => {
-          const data = doc.data();
-          // Fallback: Use email prefix if no display name exists
-          const name = data.displayName || data.email.split('@')[0]; 
-          return { id: doc.id, name, email: data.email, role: data.role };
-        });
-        setMembers(memberList);
-      });
+      
+      const unsubscribe = onSnapshot(q, 
+        (snapshot) => {
+          const memberList = snapshot.docs.map(doc => {
+            const data = doc.data();
+            const name = data.displayName || data.email.split('@')[0]; 
+            return { id: doc.id, name, email: data.email, role: data.role };
+          });
+          setMembers(memberList);
+        },
+        (error) => { // 👈 ADD THIS ERROR BLOCK
+           console.log("Member sync pending..."); 
+        }
+      );
+      
       return () => unsubscribe();
     }
   }, [currentUser, currentGroupId]);
@@ -73,30 +79,41 @@ function App() {
   // --- 2. Fetch Tasks ---
   useEffect(() => {
     if (currentUser && hasAcceptedHipaa && currentGroupId) {
+      
+      // 1. RESTORED: Define the query 'q'
       let tasksCollectionRef = collection(db, "tasks");
       let q = query(tasksCollectionRef, where('groupId', '==', currentGroupId)); 
 
+      // Apply Filters
       if (filterCategory !== 'All') q = query(q, where('category', '==', filterCategory));
       if (filterStatus !== 'All') q = query(q, where('status', '==', filterStatus));
       
+      // Apply Sort
       q = query(q, orderBy(sortField, sortDirection));
 
-      const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const tasksArray = [];
-        querySnapshot.forEach((d) => {
-          tasksArray.push({ id: d.id, ...d.data() });
-        });
-        
-        // Handle Assignee Filter in memory (supports ID or Name)
-        if (filterAssignee !== 'All') {
-            setTasks(tasksArray.filter(t => t.assignee === filterAssignee || t.assigneeId === filterAssignee));
-        } else {
-            setTasks(tasksArray);
+      // 2. NOW listen to 'q' (with the error handler)
+      const unsubscribe = onSnapshot(q, 
+        (querySnapshot) => {
+          const tasksArray = [];
+          querySnapshot.forEach((d) => {
+            tasksArray.push({ id: d.id, ...d.data() });
+          });
+          
+          // Handle Assignee Filter in memory
+          if (filterAssignee !== 'All') {
+              setTasks(tasksArray.filter(t => t.assignee === filterAssignee || t.assigneeId === filterAssignee));
+          } else {
+              setTasks(tasksArray);
+          }
+        },
+        (error) => { // Error Handler
+           console.log("Task sync pending...", error.message); 
         }
-      });
+      );
+      
       return () => unsubscribe();
     }
-  }, [currentUser, hasAcceptedHipaa, currentGroupId, filterAssignee, filterCategory, filterStatus, sortField, sortDirection]); 
+  }, [currentUser, hasAcceptedHipaa, currentGroupId, filterAssignee, filterCategory, filterStatus, sortField, sortDirection]);
 
   // --- Handlers ---
   const handleTaskClick = (task) => { setTaskToView(task); };
@@ -320,8 +337,14 @@ function App() {
           </div>
         )}
 
-        {/* VIEW 2: KEY INFO */}
-        {currentView === 'keyinfo' && <KeyInfo groupId={currentGroupId} userRole={currentUserRole} />}
+        {/* VIEW 2: KEY INFO - 🛑 UPDATE THIS LINE 🛑 */}
+        {currentView === 'keyinfo' && (
+            <KeyInfo 
+                groupId={currentGroupId} 
+                userRole={currentUserRole} 
+                members={members} // 👈 ADD THIS PROP
+            />
+        )}
 
         {/* VIEW 3: WELLNESS */}
         {currentView === 'wellness' && <WellnessCenter />}
@@ -332,7 +355,14 @@ function App() {
       {isTaskModalOpen && <NewTaskModal onClose={handleCloseTaskModal} onSave={handleSave} members={members} task={taskToEdit} />}
       {isInviteModalOpen && <InviteModal onClose={() => setIsInviteModalOpen(false)} currentGroupId={currentGroupId} />}
       {isSettingsOpen && <GroupSettingsModal onClose={() => setIsSettingsOpen(false)} />}
-      {taskToView && <TaskHistoryModal onClose={() => setTaskToView(null)} task={taskToView} currentUserRole={currentUserRole} />}
+      {taskToView && (
+        <TaskHistoryModal 
+          onClose={() => setTaskToView(null)} 
+          task={taskToView} 
+          currentUserRole={currentUserRole} 
+          members={members} // 👈 ADD THIS PROP
+        />
+)}
     </div>
   )
 }
