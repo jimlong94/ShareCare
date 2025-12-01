@@ -1,15 +1,15 @@
-// src/components/NewTaskModal.jsx - UPDATED
-
+// src/components/NewTaskModal.jsx
 import { useState, useEffect } from 'react'
-import { X } from 'lucide-react' 
+import { X, Calendar, User, Tag, Clock, AlignLeft } from 'lucide-react' 
+import { useAuth } from '../AuthContext';
 
 function NewTaskModal({ onClose, onSave, members, task }) {
+  const { currentUser } = useAuth();
   
-  // --- Initialization ---
   useEffect(() => {
     if (task) {
       setTitle(task.title || '')
-      setAssigneeId(task.assigneeId || '') // Default to ID if available
+      setAssigneeId(task.assigneeId || '') 
       setAssigneeName(task.assignee || '')
       setCategory(task.category || 'Appointment')
       setStatus(task.status || 'Delegated')
@@ -29,15 +29,12 @@ function NewTaskModal({ onClose, onSave, members, task }) {
   const handleAssigneeChange = (e) => {
     const selectedId = e.target.value;
     setAssigneeId(selectedId);
-    
-    // Find name based on ID
     const member = members.find(m => m.id === selectedId);
     setAssigneeName(member ? member.name : 'Unknown');
   };
 
   const handleSubmit = (e) => {
     e.preventDefault()
-
     if (!title || !assigneeId) {
       alert('Please fill in at least the Title and Assignee.')
       return
@@ -45,121 +42,144 @@ function NewTaskModal({ onClose, onSave, members, task }) {
 
     let finalUpdates = task ? [...task.updates] : [];
     if (task) {
-        if (finalUpdates.length > 0 && finalUpdates[0].text !== notes) {
-            finalUpdates[0].text = notes; 
-        }
+      if (finalUpdates.length > 0 && finalUpdates[0].text !== notes) {
+          finalUpdates[0].text = notes; 
+      }
     } else {
-        finalUpdates = notes ? [{ type: 'note', text: notes, timestamp: new Date() }] : [];
+      finalUpdates = notes ? [{ 
+          type: 'note', 
+          text: notes, 
+          timestamp: new Date(),
+          user: currentUser.email 
+      }] : [];
     }
-
     const submittedTask = {
       ...(task && { id: task.id }),
       title,
-      assignee: assigneeName, // Save Name for display
-      assigneeId: assigneeId, // Save ID for logic
+      assignee: assigneeName, 
+      assigneeId: assigneeId, 
       category,
       status,
       dueDate, 
       updates: finalUpdates,
     }
-
     onSave(submittedTask)
   }
 
   // Styles
-  const inputClass = "w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-btn text-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:bg-white transition-all";
-  const labelClass = "block text-sm font-bold text-slate-700 mb-1.5 ml-1";
+  const inputBase = "w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all placeholder:text-slate-400";
+  const iconLabel = "flex items-center gap-2 text-xs font-bold text-slate-500 mb-1.5 uppercase tracking-wide";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-card shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+      <div 
+        className="bg-white rounded-3xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
         
+        {/* Header */}
         <div className="flex justify-between items-center p-6 border-b border-slate-100">
-          <h2 className="text-2xl font-bold text-teal-600 tracking-tight">{task ? 'Edit Task' : 'New Task'}</h2>
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">{task ? 'Edit Task' : 'New Task'}</h2>
+            <p className="text-xs text-slate-400 font-medium">Fill in the details below.</p>
+          </div>
           <button onClick={onClose} className="p-2 rounded-full text-slate-400 hover:bg-slate-100 hover:text-rose-500 transition-colors">
             <X size={24} />
           </button>
         </div>
 
+        {/* Scrollable Form */}
         <div className="p-6 overflow-y-auto custom-scrollbar">
-          <form id="task-form" className="flex flex-col gap-5" onSubmit={handleSubmit}>
+          <form id="task-form" className="flex flex-col gap-6" onSubmit={handleSubmit}>
             
             <div>
-              <label className={labelClass}>Task Title</label>
+              <label className={iconLabel}>Task Title</label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                className={inputClass}
-                placeholder="e.g. Pick up prescription"
+                className={`${inputBase} font-semibold text-lg`}
+                placeholder="e.g. Mom's Cardiology Appt"
                 autoFocus
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {/* ASSIGNEE DROPDOWN */}
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Assign To</label>
-                <select
-                  value={assigneeId}
-                  onChange={handleAssigneeChange}
-                  className={inputClass}
-                >
-                  <option value="">Select Member...</option>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                        {m.name} ({m.role})
-                    </option>
-                  ))}
-                </select>
+                <label className={iconLabel}><User size={14}/> Assign To</label>
+                <div className="relative">
+                    <select value={assigneeId} onChange={handleAssigneeChange} className={`${inputBase} appearance-none cursor-pointer`}>
+                    <option value="">Select...</option>
+                    {members.map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                    </select>
+                    {/* Custom Arrow */}
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">▼</div>
+                </div>
               </div>
 
               <div>
-                <label className={labelClass}>Category</label>
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
-                  <option value="Appointment">Appointment</option>
-                  <option value="Household">Household</option>
-                  <option value="Misc">Misc</option>
-                </select>
+                <label className={iconLabel}><Tag size={14}/> Category</label>
+                <div className="relative">
+                    <select value={category} onChange={(e) => setCategory(e.target.value)} className={`${inputBase} appearance-none cursor-pointer`}>
+                    <option value="Appointment">Appointment</option>
+                    <option value="Household">Household</option>
+                    <option value="Misc">Misc</option>
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">▼</div>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className={labelClass}>Status</label>
-                <select value={status} onChange={(e) => setStatus(e.target.value)} className={inputClass}>
-                  <option value="Delegated">Delegated</option>
-                  <option value="In progress">In progress</option>
-                  <option value="Waiting">Waiting</option>
-                </select>
+                <label className={iconLabel}><Clock size={14}/> Status</label>
+                <div className="relative">
+                    <select value={status} onChange={(e) => setStatus(e.target.value)} className={`${inputBase} appearance-none cursor-pointer`}>
+                    <option value="Delegated">Delegated</option>
+                    <option value="In progress">In progress</option>
+                    <option value="Waiting">Waiting</option>
+                    </select>
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">▼</div>
+                </div>
               </div>
 
               <div>
-                <label className={labelClass}>Due Date</label>
-                <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputClass} />
+                <label className={iconLabel}><Calendar size={14}/> Due Date</label>
+                <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputBase} />
               </div>
             </div>
 
             <div>
-              <label className={labelClass}>Initial Note</label>
+              <label className={iconLabel}><AlignLeft size={14}/> Initial Note</label>
               <textarea
                 rows="3"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                className={inputClass}
-                placeholder="Add details here..."
+                className={`${inputBase} resize-none`}
+                placeholder="Add logistical details here (No medical data)..."
               ></textarea>
             </div>
 
           </form>
         </div>
 
-        <div className="p-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50 rounded-b-card">
-          <button type="button" className="px-5 py-2.5 rounded-btn font-semibold text-slate-500 hover:bg-slate-200 transition-colors" onClick={onClose}>
+        {/* Footer */}
+        <div className="p-6 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50/50 rounded-b-3xl">
+          <button 
+            type="button" 
+            className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:text-slate-700 hover:bg-slate-200/50 transition-colors" 
+            onClick={onClose}
+          >
             Cancel
           </button>
-          <button type="submit" form="task-form" className="px-6 py-2.5 rounded-btn font-bold text-white bg-teal-600 hover:bg-teal-700 shadow-soft transition-transform active:scale-95">
-            {task ? 'Update Task' : 'Save Task'}
+          <button 
+            type="submit" 
+            form="task-form" 
+            className="px-8 py-3 rounded-xl font-bold text-white bg-teal-600 hover:bg-teal-700 shadow-lg shadow-teal-200 transition-transform active:scale-95"
+          >
+            {task ? 'Save Changes' : 'Create Task'}
           </button>
         </div>
 

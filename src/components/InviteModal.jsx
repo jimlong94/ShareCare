@@ -1,10 +1,9 @@
-// src/components/InviteModal.jsx - TAILWIND EDITION
-
+// src/components/InviteModal.jsx
 import React, { useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import { X, Copy, Users, Check } from 'lucide-react';
+import { X, Copy, Users, Check, Ticket, ArrowRight } from 'lucide-react';
 
 function InviteModal({ onClose, currentGroupId }) {
   const { currentUser } = useAuth();
@@ -45,79 +44,79 @@ function InviteModal({ onClose, currentGroupId }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-white rounded-card shadow-2xl w-full max-w-md flex flex-col animate-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md flex flex-col animate-in zoom-in-95 duration-200 overflow-hidden">
         
-        <div className="flex justify-between items-center p-6 border-b border-slate-100">
+        <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center gap-3">
-              <div className="p-2 bg-teal-50 text-teal-600 rounded-lg"><Users size={20} /></div>
-              <h2 className="text-xl font-bold text-slate-800">Invite Member</h2>
+              <div className="p-2.5 bg-teal-100 text-teal-600 rounded-xl"><Users size={24} /></div>
+              <h2 className="text-xl font-bold text-slate-800">Invite Family</h2>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X size={24} /></button>
+          <button onClick={onClose} className="p-2 rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"><X size={24} /></button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-8 space-y-6">
           {!inviteToken ? (
             <>
-                <p className="text-slate-600 text-sm">
-                    Generate a one-time code to let a family member join <strong>Hub ID: {currentGroupId}</strong>.
+                <p className="text-slate-600 text-sm leading-relaxed">
+                    Create a secure link to let a family member join your Zen Planner hub.
                 </p>
                 
-                <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">Assign Role</label>
-                    <select
-                        value={invitedRole}
-                        onChange={(e) => setInvitedRole(e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-btn focus:outline-none focus:ring-2 focus:ring-teal-500/20"
-                    >
-                        <option value="Editor">Editor (Full Access)</option>
-                        <option value="User">User (View & Complete Tasks)</option>
-                    </select>
-                    <p className="text-xs text-slate-400 mt-2">
-                        {invitedRole === 'Editor' ? 'Can create, edit, and delete tasks.' : 'Can only check off tasks assigned to them.'}
-                    </p>
+                <div className="space-y-2">
+                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Access Level</label>
+                    <div className="relative">
+                        <select
+                            value={invitedRole}
+                            onChange={(e) => setInvitedRole(e.target.value)}
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 appearance-none cursor-pointer"
+                        >
+                            <option value="Editor">Editor (Can edit tasks & notes)</option>
+                            <option value="User">Helper (View & Check-off only)</option>
+                        </select>
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">▼</div>
+                    </div>
                 </div>
 
-                {error && <p className="text-rose-500 text-sm bg-rose-50 p-2 rounded">{error}</p>}
+                {error && <p className="text-rose-500 text-sm bg-rose-50 p-3 rounded-xl border border-rose-100 text-center">{error}</p>}
                 
                 <button
                     onClick={generateInvite}
                     disabled={loading}
-                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3 rounded-btn shadow-soft transition-transform active:scale-95"
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl shadow-lg shadow-slate-200 transition-transform active:scale-95 flex items-center justify-center gap-2"
                 >
-                    {loading ? 'Generating Code...' : 'Generate Invite Code'}
+                    {loading ? 'Generating...' : <>Generate Code <ArrowRight size={18} opacity={0.6}/></>}
                 </button>
             </>
           ) : (
-            <div className="space-y-4 animate-in slide-in-from-bottom-2">
-                <div className="bg-teal-50 border border-teal-100 p-4 rounded-lg text-center">
-                    <p className="text-teal-800 font-medium mb-1">Invitation Ready!</p>
-                    <p className="text-xs text-teal-600">Share this code with your family member.</p>
+            <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+                <div className="text-center space-y-2">
+                    <div className="inline-flex p-3 bg-teal-50 text-teal-600 rounded-full mb-1">
+                        <Ticket size={32} />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-800">Invitation Ready</h3>
+                    <p className="text-xs text-slate-500">Share this code with your family member.</p>
                 </div>
                 
-                <div className="relative">
-                    <label className="block text-xs font-bold text-slate-400 mb-1 uppercase tracking-wide">Invite Code</label>
-                    <div className="flex items-center gap-2">
-                        <code className="flex-1 bg-slate-100 border border-slate-200 p-3 rounded-lg font-mono text-lg text-slate-800 tracking-wider text-center select-all">
+                <div className="relative group cursor-pointer" onClick={copyToClipboard}>
+                    <div className="absolute inset-0 bg-teal-100 rounded-xl transform translate-y-1 translate-x-1 transition-transform group-hover:translate-x-2 group-hover:translate-y-2"></div>
+                    <div className="relative bg-white border-2 border-dashed border-teal-200 rounded-xl p-4 flex items-center justify-between hover:border-teal-400 transition-colors">
+                        <code className="font-mono text-2xl font-bold text-slate-800 tracking-widest pl-2">
                             {inviteToken}
                         </code>
-                        <button 
-                            onClick={copyToClipboard}
-                            className="bg-slate-800 text-white p-3 rounded-lg hover:bg-slate-700 transition-colors"
-                            title="Copy to Clipboard"
-                        >
+                        <div className={`p-2 rounded-lg transition-colors ${copied ? 'bg-teal-50 text-teal-600' : 'bg-slate-50 text-slate-400 group-hover:text-teal-500'}`}>
                             {copied ? <Check size={20} /> : <Copy size={20} />}
-                        </button>
+                        </div>
                     </div>
                 </div>
 
-                <div className="bg-slate-50 p-3 rounded border border-slate-100 text-xs text-slate-500">
-                    <p>• Code expires in 7 days.</p>
-                    <p>• Valid for one use only.</p>
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs text-slate-500 space-y-2">
+                    <p className="flex gap-2"><span className="font-bold text-slate-400">1.</span> Send this code to them.</p>
+                    <p className="flex gap-2"><span className="font-bold text-slate-400">2.</span> They select "Join Hub" at signup.</p>
+                    <p className="flex gap-2"><span className="font-bold text-slate-400">3.</span> Code expires in 7 days.</p>
                 </div>
 
                 <button
                     onClick={onClose}
-                    className="w-full bg-slate-100 text-slate-600 font-bold py-3 rounded-btn hover:bg-slate-200 transition-colors"
+                    className="w-full bg-slate-100 text-slate-600 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors"
                 >
                     Done
                 </button>

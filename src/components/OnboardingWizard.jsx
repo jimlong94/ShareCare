@@ -1,11 +1,10 @@
-// src/components/OnboardingWizard.jsx - UPDATED WITH PIN CREATION
-
+// src/components/OnboardingWizard.jsx
 import React, { useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import { encryptData } from '../utils/crypto'; // 👈 Requires crypto.js
-import { CheckCircle2, ShieldAlert, Users, LogOut, ArrowRight, Lock, Key } from 'lucide-react';
+import { encryptData } from '../utils/crypto'; 
+import { CheckCircle2, ShieldAlert, Users, LogOut, ArrowRight, Lock, Leaf } from 'lucide-react';
 
 function OnboardingWizard() {
   const { completeOnboarding, logout, userProfile } = useAuth();
@@ -20,27 +19,18 @@ function OnboardingWizard() {
   const isAdmin = userProfile?.role === 'Admin';
   const totalSteps = isAdmin ? 4 : 3;
 
+  // --- RED ZONE: LOGIC PRESERVED ---
   const createGenesisRecord = async () => {
     if (!userProfile?.groupId) return;
-    
-    // 1. Create a dummy "Welcome" record to initialize encryption
-    const genesisData = {
-      name: "Vault Initialized",
-      location: "System Secure Storage",
-      contact: "Admin",
-    };
-
-    // 2. Encrypt it immediately with the new PIN
+    const genesisData = { name: "Vault Initialized", location: "System Secure Storage", contact: "Admin" };
     const encryptedPayload = {
       groupId: userProfile.groupId,
       createdAt: new Date(),
       name: encryptData(genesisData.name, pin),
       location: encryptData(genesisData.location, pin),
       contact: encryptData(genesisData.contact, pin),
-      isGenesis: true // Optional flag for UI handling later
+      isGenesis: true 
     };
-
-    // 3. Write to Firestore
     await addDoc(collection(db, 'key_documents'), encryptedPayload);
   };
 
@@ -49,14 +39,13 @@ function OnboardingWizard() {
       setStep(step + 1);
       setCanProceed(false); 
     } else {
-      // FINAL STEP LOGIC
       if (isAdmin && step === 4) {
         if (pin.length < 4) { alert("PIN must be at least 4 characters."); return; }
         if (pin !== confirmPin) { alert("PINs do not match."); return; }
         
         try {
           setIsSaving(true);
-          await createGenesisRecord(); // 👈 Lock the vault
+          await createGenesisRecord(); 
           await completeOnboarding();
         } catch (e) {
           console.error(e);
@@ -64,121 +53,115 @@ function OnboardingWizard() {
           setIsSaving(false);
         }
       } else {
-        // Non-Admins or Standard completion
         completeOnboarding();
       }
     }
   };
+  // ---------------------------------
 
   const steps = {
     1: {
-      title: "Terms of Service",
-      icon: <CheckCircle2 size={28} className="text-teal-600" />,
+      title: "Welcome to Zen Family Planner",
+      subtitle: "Let's set some ground rules to keep things calm and organized.",
+      icon: <Leaf size={32} className="text-teal-600" />,
       content: (
         <div className="space-y-4 text-slate-600">
-            <p className="font-medium text-slate-800">Welcome to ShareCare. Before we begin, you must agree to our operating rules.</p>
-            <ul className="list-disc pl-5 space-y-2 text-sm">
-                <li>This service is a <strong>logistics coordination tool</strong> only.</li>
-                <li>We do not provide medical advice or emergency services.</li>
-                <li>You are responsible for the accuracy of the tasks you create.</li>
-                <li>Accounts found abusing the system will be terminated.</li>
+            <div className="bg-teal-50 border border-teal-100 p-4 rounded-2xl text-teal-900 text-sm font-medium">
+                This is a logistics tool, designed to help your family coordinate care without the chaos.
+            </div>
+            <ul className="space-y-3 text-sm md:text-base">
+                <li className="flex gap-3 items-start"><CheckCircle2 className="shrink-0 text-teal-500" size={20}/> We do not provide medical advice.</li>
+                <li className="flex gap-3 items-start"><CheckCircle2 className="shrink-0 text-teal-500" size={20}/> You are responsible for the accuracy of tasks.</li>
+                <li className="flex gap-3 items-start"><CheckCircle2 className="shrink-0 text-teal-500" size={20}/> Be kind to each other in the notes.</li>
             </ul>
         </div>
       ),
-      label: "I agree to the Terms of Service.",
+      label: "I agree to the Terms of Service",
       requiresCheck: true
     },
     2: {
-      title: "Data & Privacy (Non-HIPAA)",
-      icon: <ShieldAlert size={28} className="text-rose-500" />,
+      title: "Privacy & Safety",
+      subtitle: "This app is for logistics, NOT medical records.",
+      icon: <ShieldAlert size={32} className="text-rose-500" />,
       content: (
         <div className="space-y-4">
-            <div className="bg-rose-50 border border-rose-100 p-4 rounded-lg text-rose-800 text-sm font-bold flex gap-2">
-                <ShieldAlert className="shrink-0" size={20} />
-                CRITICAL WARNING: This app is NOT HIPAA Compliant.
+            <div className="bg-rose-50 border border-rose-100 p-5 rounded-2xl text-rose-900 text-sm font-bold flex gap-3 items-start">
+                <ShieldAlert className="shrink-0 mt-0.5" size={20} />
+                <div>
+                    CRITICAL: This app is NOT HIPAA Compliant.
+                </div>
             </div>
-            <p className="text-slate-700 text-sm font-semibold">You are strictly prohibited from uploading:</p>
-            <ul className="list-disc pl-5 space-y-2 text-sm text-slate-600">
-                <li>Photos of medical charts or X-rays.</li>
+            <p className="text-slate-700 font-semibold">Strictly Prohibited Uploads:</p>
+            <ul className="list-disc pl-5 space-y-2 text-sm text-slate-600 marker:text-rose-400">
+                <li>Photos of medical charts, X-rays, or ID cards.</li>
                 <li>Detailed diagnosis reports or treatment plans.</li>
-                <li>Social Security Numbers or Insurance ID images.</li>
+                <li>Social Security Numbers in task descriptions.</li>
             </ul>
-            <p className="text-xs text-slate-500 mt-2">We store tasks as <strong>raw text</strong>. By proceeding, you consent to this.</p>
         </div>
       ),
-      label: "I confirm I will NOT upload medical records.",
+      label: "I promise NOT to upload medical records",
       requiresCheck: true
     },
     3: {
-      title: "Family Group Sharing",
-      icon: <Users size={28} className="text-amber-500" />,
+      title: "Family Transparency",
+      subtitle: "Coordinating care requires everyone to be on the same page.",
+      icon: <Users size={32} className="text-amber-500" />,
       content: (
         <div className="space-y-4 text-slate-600">
-            <p className="font-medium text-slate-800">ShareCare is designed for transparency.</p>
-            <p className="text-sm">
-                Any Task or Note you create will be <strong>instantly visible</strong> to every member of your "Family Hub."
+            <p className="text-lg font-medium text-slate-800">No secrets in the Hub.</p>
+            <p className="text-sm leading-relaxed">
+                Any Task or Note you create will be <strong>instantly visible</strong> to every member of your Family Group. This ensures no one doubles up on work or misses an appointment.
             </p>
-            <p className="text-sm bg-amber-50 p-3 rounded border border-amber-100 text-amber-900">
-                Please confirm you understand that other family members (Editors and Users) will see the information you post here.
-            </p>
+            <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 text-amber-900 text-sm italic">
+                "Many hands make light work."
+            </div>
         </div>
       ),
-      label: "I consent to share my inputs with my Family Hub.",
+      label: "I understand my inputs are shared with the group",
       requiresCheck: true
     },
-    
-    // ... inside steps object ...
     4: {
-      title: "Create Master PIN",
-      icon: <Lock size={28} className="text-slate-700" />,
+      title: "Secure the Vault",
+      subtitle: "Create a Master PIN for your sensitive documents.",
+      icon: <Lock size={32} className="text-slate-700" />,
       content: (
-        <form 
-            onSubmit={(e) => { e.preventDefault(); /* Prevent refresh */ }} 
-            className="space-y-4 text-slate-600"
-        >
-            <p className="font-medium text-slate-800">Secure your Key Info Vault.</p>
-            {/* ... rest of the text ... */}
+        <form onSubmit={(e) => { e.preventDefault(); }} className="space-y-6">
+            <p className="text-sm text-slate-500">
+                This PIN will encrypt your "Key Info" (Wills, DNRs, etc). <br/>
+                <strong>If you lose this PIN, the data is lost forever.</strong>
+            </p>
             
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-4 mt-4">
-                {/* INPUT 1: FAMILY MASTER PIN */}
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                 <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Family Master PIN</label>
+                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Create Family Master PIN</label>
                     <input 
                         type="password" 
-                        autoComplete="new-password" // 👈 Helps browser managers
+                        autoComplete="new-password"
                         value={pin}
-                        onChange={(e) => { 
-                          const val = e.target.value.trim(); 
-                          setPin(val); 
-                          setCanProceed(val.length >= 4 && val === confirmPin); 
-                        }}
-                        className="w-full p-3 border border-slate-300 rounded bg-white font-mono tracking-widest text-lg focus:ring-2 focus:ring-teal-500 outline-none"
-                        placeholder="****"
+                        onChange={(e) => { const val = e.target.value.trim(); setPin(val); setCanProceed(val.length >= 4 && val === confirmPin); }}
+                        className="w-full text-center text-3xl tracking-[0.5em] font-mono px-4 py-3 bg-white border-2 border-slate-200 rounded-xl focus:outline-none focus:border-teal-500 transition-all"
+                        placeholder="••••"
+                        maxLength={8}
                     />
                 </div>
                 
-                {/* INPUT 2: CONFIRM PIN */}
                 <div>
-                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Confirm PIN</label>
+                    <label className="block text-xs font-bold text-slate-400 mb-2 uppercase tracking-wide">Confirm PIN</label>
                     <input 
                         type="password" 
                         autoComplete="new-password"
                         value={confirmPin}
-                        onChange={(e) => { 
-                          const val = e.target.value.trim();
-                          setConfirmPin(val); 
-                          setCanProceed(pin.length >= 4 && pin === val); 
-                        }}
-                        className="w-full p-3 border border-slate-300 rounded bg-white font-mono tracking-widest text-lg focus:ring-2 focus:ring-teal-500 outline-none"
-                        placeholder="****"
+                        onChange={(e) => { const val = e.target.value.trim(); setConfirmPin(val); setCanProceed(pin.length >= 4 && pin === val); }}
+                        className={`w-full text-center text-3xl tracking-[0.5em] font-mono px-4 py-3 bg-white border-2 rounded-xl focus:outline-none transition-all ${pin && confirmPin && pin === confirmPin ? 'border-teal-500 ring-2 ring-teal-50' : 'border-slate-200 focus:border-slate-400'}`}
+                        placeholder="••••"
+                        maxLength={8}
                     />
                 </div>
             </div>
-            {/* ... rest of footer ... */}
         </form>
       ),
-      label: "I have recorded this PIN in a safe place.",
-      requiresCheck: false 
+      label: "I have written this PIN down physically",
+      requiresCheck: true // Force them to check a box saying they wrote it down
     }
   };
 
@@ -186,44 +169,49 @@ function OnboardingWizard() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
-      <div className="bg-white rounded-card shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-300">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
         
-        {/* Progress Bar */}
-        <div className="flex h-1.5 w-full bg-slate-100">
-            <div className={`h-full bg-teal-500 transition-all duration-300`} style={{ width: `${(step / totalSteps) * 100}%` }}></div>
+        {/* Top Progress Bar */}
+        <div className="bg-slate-50 border-b border-slate-100 px-8 py-6">
+            <div className="flex justify-between items-center mb-4">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-white border border-slate-100 rounded-full shadow-sm">
+                        {currentStepData.icon}
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-800">{currentStepData.title}</h2>
+                        <p className="text-xs text-slate-500">{currentStepData.subtitle}</p>
+                    </div>
+                </div>
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-widest hidden sm:block">
+                    Step {step} / {totalSteps}
+                </span>
+            </div>
+            {/* Progress Line */}
+            <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
+                <div className="h-full bg-teal-500 transition-all duration-500 ease-out" style={{ width: `${(step / totalSteps) * 100}%` }}></div>
+            </div>
         </div>
 
-        <div className="p-8">
-            {/* Header */}
-            <div className="flex items-center gap-4 mb-6">
-                <div className="p-3 bg-slate-50 rounded-full border border-slate-100">
-                    {currentStepData.icon}
-                </div>
-                <div>
-                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Step {step} of {totalSteps}</span>
-                    <h2 className="text-xl font-bold text-slate-800">{currentStepData.title}</h2>
-                </div>
-            </div>
-            
-            {/* Content Body */}
-            <div className="min-h-[200px] bg-white rounded-lg">
-                {currentStepData.content}
-            </div>
+        {/* Content Body */}
+        <div className="p-8 overflow-y-auto custom-scrollbar">
+            {currentStepData.content}
 
-            {/* Checkbox Agreement (Only for steps 1-3) */}
+            {/* Agreement Checkbox */}
             {currentStepData.requiresCheck && (
-                <div className="mt-6 p-4 bg-slate-50 rounded-btn border border-slate-100 hover:border-teal-200 transition-colors cursor-pointer" onClick={() => setCanProceed(!canProceed)}>
-                    <label className="flex items-start gap-3 cursor-pointer pointer-events-none">
-                        <input
-                            type="checkbox"
-                            checked={canProceed}
-                            readOnly
-                            className="mt-1 w-5 h-5 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                        />
-                        <span className="text-sm font-semibold text-slate-700 leading-snug">
-                            {currentStepData.label}
-                        </span>
-                    </label>
+                <div 
+                    onClick={() => setCanProceed(!canProceed)}
+                    className={`
+                        mt-8 p-4 rounded-xl border-2 cursor-pointer transition-all flex items-center gap-4
+                        ${canProceed ? 'border-teal-500 bg-teal-50' : 'border-slate-200 bg-slate-50 hover:border-slate-300'}
+                    `}
+                >
+                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${canProceed ? 'bg-teal-500 border-teal-500 text-white' : 'border-slate-300 bg-white'}`}>
+                        {canProceed && <CheckCircle2 size={16} strokeWidth={4} />}
+                    </div>
+                    <span className={`font-bold ${canProceed ? 'text-teal-800' : 'text-slate-600'}`}>
+                        {currentStepData.label}
+                    </span>
                 </div>
             )}
         </div>
@@ -232,9 +220,9 @@ function OnboardingWizard() {
         <div className="bg-slate-50 p-6 border-t border-slate-100 flex justify-between items-center">
           <button 
              onClick={logout}
-             className="text-slate-400 hover:text-rose-500 text-sm font-medium flex items-center gap-2 transition-colors"
+             className="text-slate-400 hover:text-rose-500 text-sm font-medium flex items-center gap-2 transition-colors px-2"
           >
-            <LogOut size={16} /> Cancel & Logout
+            <LogOut size={16} /> Logout
           </button>
           
           <button 
@@ -242,14 +230,14 @@ function OnboardingWizard() {
             onClick={handleNext}
             disabled={!canProceed || isSaving} 
             className={`
-                px-6 py-3 rounded-btn font-bold flex items-center gap-2 transition-all
+                px-8 py-3.5 rounded-xl font-bold flex items-center gap-2 transition-all shadow-sm
                 ${(canProceed && !isSaving) 
-                    ? 'bg-teal-600 text-white shadow-soft hover:bg-teal-700 active:scale-95' 
+                    ? 'bg-slate-900 text-white hover:bg-slate-800 hover:shadow-lg active:scale-95' 
                     : 'bg-slate-200 text-slate-400 cursor-not-allowed'}
             `}
           >
-            {isSaving ? 'Securing...' : (step === totalSteps ? "Complete Setup" : "Next Step")} 
-            {!isSaving && step < totalSteps && <ArrowRight size={18} />}
+            {isSaving ? 'Setting up Vault...' : (step === totalSteps ? "Finish Setup" : "Next Step")} 
+            {!isSaving && <ArrowRight size={18} />}
           </button>
         </div>
 
