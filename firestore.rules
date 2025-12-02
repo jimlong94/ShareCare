@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- HELPER FUNCTIONS ---
+
+    // 1. Is the user actually logged in?
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // 2. Fetch the current user's profile from Firestore
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    // 3. Check if the user belongs to the target Group ID
+    function isGroupMember(groupId) {
+      return isSignedIn() && getUserData().groupId == groupId;
+    }
+
+    // --- COLLECTION RULES ---
+
+    // 1. Users Collection
+    // - You can read your own profile.
+    // - You can read profiles of other people IN YOUR GROUP (to see the member list).
+    // - You can write to your own profile (needed for onboarding and joining groups).
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || resource.data.groupId == getUserData().groupId);
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // 2. Groups Collection
+    // - Anyone signed in can create a NEW group (The "Start Hub" button).
+    // - Only members can read the group details.
+    match /groups/{groupId} {
+      allow create: if isSignedIn();
+      allow read: if isGroupMember(groupId);
+      allow update: if isGroupMember(groupId); // e.g. Admin changing the group name
+    }
+
+    // 3. Tasks (The Core Work)
+    // - You must be a member of the group ID stamped on the task to touch it.
+    match /tasks/{taskId} {
+      allow read: if isGroupMember(resource.data.groupId);
+      allow create: if isGroupMember(request.resource.data.groupId);
+      allow update, delete: if isGroupMember(resource.data.groupId);
+    }
+
+    // 4. The Vault (Encrypted Data)
+    // - Strict Group ID enforcement.
+    match /key_documents/{docId} {
+      allow read: if isGroupMember(resource.data.groupId);
+      allow create: if isGroupMember(request.resource.data.groupId);
+      allow update, delete: if isGroupMember(resource.data.groupId);
+    }
+    match /key_providers/{docId} {
+      allow read: if isGroupMember(resource.data.groupId);
+      allow create: if isGroupMember(request.resource.data.groupId);
+      allow update, delete: if isGroupMember(resource.data.groupId);
+    }
+    match /key_notes/{docId} {
+      allow read: if isGroupMember(resource.data.groupId);
+      allow create: if isGroupMember(request.resource.data.groupId);
+      allow update, delete: if isGroupMember(resource.data.groupId);
+    }
+
+    // 5. Invites
+    // - Read: Public (if you have the ID). This is required so a new user can 
+    //   verify an invite code exists *before* they officially join the group.
+    // - Create/Update: Must be signed in.
+    match /invites/{inviteId} {
+      allow read: if true; 
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+    }
+  }
+}

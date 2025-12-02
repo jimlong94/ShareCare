@@ -59,6 +59,25 @@ function App() {
   const currentGroupId = userProfile.groupId;
   const currentUserRole = userProfile.role;
 
+  // ... inside App() function ...
+  
+  // Offline Detection
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+  
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // --- Helper: Auto-Retry on Permission Failures ---
   const handleSyncError = (err, source) => {
     console.log(`${source} sync error (likely race condition), retrying in 1s...`, err);
@@ -208,6 +227,12 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
+      {/* OFFLINE BANNER */}
+      {!isOnline && (
+        <div className="bg-slate-800 text-white text-xs font-bold text-center py-1">
+          You are offline. Changes will sync when connection returns.
+        </div>
+      )}
       
       {/* HEADER SECTION */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">

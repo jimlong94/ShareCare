@@ -1,25 +1,45 @@
 // vite.config.js
-
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
-  // --- ADD THIS CONFIGURATION BLOCK ---
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate', // 👈 Updates the app automatically when you deploy changes
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      manifest: {
+        name: "The Zen Family Planner",
+        short_name: "Zen Planner",
+        description: "Secure logistics for family caregivers.",
+        theme_color: "#0d9488",
+        background_color: "#f8fafc",
+        display: "standalone",
+        orientation: "portrait",
+        start_url: "/",
+        icons: [
+          {
+            src: "/icon-192.png",
+            type: "image/png",
+            sizes: "192x192"
+          },
+          {
+            src: "/icon-512.png",
+            type: "image/png",
+            sizes: "512x512"
+          }
+        ]
+      }
+    })
+  ],
   server: {
-    // This setting ensures that Vite starts on the port we expect
     port: 5173,
-    // This allows access from the local network, helpful for mobile testing
     host: true
   },
-  // This is the CRITICAL part for nested projects like yours
   root: '.', 
   build: {
-    // The directory where your build output will be placed (default is 'dist')
     outDir: 'dist',
-    // The base directory for static assets (your index.html should be here)
     assetsDir: '.',
   }
-  // ------------------------------------
 });

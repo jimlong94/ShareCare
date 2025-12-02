@@ -1,4 +1,4 @@
-// src/firebase.js
+// src/firebase.js - STANDARD (Online Only)
 
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
@@ -17,8 +17,6 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize and export services for use throughout the app
+// Export services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-
-// Note: We don't need to export 'app' itself, just the services.
