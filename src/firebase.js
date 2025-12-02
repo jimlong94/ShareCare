@@ -1,8 +1,9 @@
-// src/firebase.js - STANDARD (Online Only)
+// src/firebase.js - STANDARD (Online Only) + MESSAGING
 
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getMessaging } from "firebase/messaging"; // 👈 NEW IMPORT
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -20,3 +21,4 @@ const app = initializeApp(firebaseConfig);
 // Export services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const messaging = getMessaging(app); // 👈 NEW EXPORT

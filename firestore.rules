@@ -9,7 +9,7 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // 2. Fetch the current user's profile from Firestore
+    // 2. Fetch the current user's profile from Firestore to find their Group ID
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
@@ -22,25 +22,22 @@ service cloud.firestore {
     // --- COLLECTION RULES ---
 
     // 1. Users Collection
-    // - You can read your own profile.
-    // - You can read profiles of other people IN YOUR GROUP (to see the member list).
-    // - You can write to your own profile (needed for onboarding and joining groups).
+    // - Read: Yourself OR people in your group (for the Team list)
+    // - Write: Yourself only (for profile updates/joining groups)
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || resource.data.groupId == getUserData().groupId);
       allow write: if isSignedIn() && request.auth.uid == userId;
     }
 
     // 2. Groups Collection
-    // - Anyone signed in can create a NEW group (The "Start Hub" button).
-    // - Only members can read the group details.
+    // - Create: Anyone signed in (Start Hub)
+    // - Read/Update: Only members of that group
     match /groups/{groupId} {
       allow create: if isSignedIn();
-      allow read: if isGroupMember(groupId);
-      allow update: if isGroupMember(groupId); // e.g. Admin changing the group name
+      allow read, update: if isGroupMember(groupId);
     }
 
     // 3. Tasks (The Core Work)
-    // - You must be a member of the group ID stamped on the task to touch it.
     match /tasks/{taskId} {
       allow read: if isGroupMember(resource.data.groupId);
       allow create: if isGroupMember(request.resource.data.groupId);
@@ -48,7 +45,7 @@ service cloud.firestore {
     }
 
     // 4. The Vault (Encrypted Data)
-    // - Strict Group ID enforcement.
+    // Strict enforcement: You must be in the group to even peek at these.
     match /key_documents/{docId} {
       allow read: if isGroupMember(resource.data.groupId);
       allow create: if isGroupMember(request.resource.data.groupId);
@@ -66,13 +63,11 @@ service cloud.firestore {
     }
 
     // 5. Invites
-    // - Read: Public (if you have the ID). This is required so a new user can 
-    //   verify an invite code exists *before* they officially join the group.
-    // - Create/Update: Must be signed in.
+    // - Read: Public (Required for joining via code)
+    // - Create/Update: Signed in users only
     match /invites/{inviteId} {
       allow read: if true; 
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
+      allow create, update: if isSignedIn();
     }
   }
 }

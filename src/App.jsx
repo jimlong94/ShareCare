@@ -13,7 +13,7 @@ import TaskCard from './components/TaskCard';
 import GroupSettingsModal from './components/GroupSettingsModal'; 
 import NoGroupState from './components/NoGroupState';
 import HelpModal from './components/HelpModal'; // 👈 NEW IMPORT
-
+import useFcmToken from './hooks/useFcmToken'; // 👈 NEW IMPORT
 import { useAuth } from './AuthContext';
 import { db } from './firebase'; 
 import { 
@@ -31,6 +31,7 @@ import { Users, Leaf, HelpCircle } from 'lucide-react'; // 👈 Added HelpCircle
 
 function App() {
   const { currentUser, logout, hasAcceptedHipaa, userProfile } = useAuth(); 
+  useFcmToken(); // 👈 THIS LINE STARTS THE PROCESS
 
   // --- UI State ---
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
