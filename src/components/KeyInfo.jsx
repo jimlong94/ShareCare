@@ -3,21 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
 import { 
-  collection, 
-  addDoc, 
-  query, 
-  where, 
-  onSnapshot, 
-  deleteDoc, 
-  doc, 
-  getDocs, 
-  limit, 
-  writeBatch 
+  collection, addDoc, query, where, onSnapshot, deleteDoc, doc, getDocs, limit, writeBatch 
 } from 'firebase/firestore';
 import { encryptData, decryptData } from '../utils/crypto';
 import { 
   Lock, Unlock, MapPin, Phone, FileText, User, Plus, Trash2, 
-  Share, StickyNote, CheckCircle2, AlertCircle, RefreshCw, AtSign, Info, Shield, Key 
+  Share, StickyNote, CheckCircle2, AlertCircle, RefreshCw, AtSign, Info, Shield 
 } from 'lucide-react';
 
 function KeyInfo({ groupId, userRole, members = [] }) {
@@ -31,12 +22,8 @@ function KeyInfo({ groupId, userRole, members = [] }) {
   const [loading, setLoading] = useState(false);
 
   const docTypes = ['Will', 'Power of Attorney', 'DNR', 'Insurance', 'Medication List', 'Misc'];
-  // ---------------------------------------------------------
-  // 👇 SOFT PLUG SIGNATURE
   const SHARE_SIGNATURE = "\n\n— via The Zen Family Planner\nzenfamilyplanner.com";
-  // ---------------------------------------------------------
 
-  // --- LOGIC ZONE (PRESERVED) ---
   useEffect(() => {
     if (!isUnlocked || !groupId) return;
     let collectionName = 'key_documents';
@@ -77,9 +64,7 @@ function KeyInfo({ groupId, userRole, members = [] }) {
     } catch (error) {
         console.error("Validation Error:", error);
         alert("System error verifying PIN.");
-    } finally {
-        setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   const handleEmergencyReset = async () => {
@@ -120,15 +105,11 @@ function KeyInfo({ groupId, userRole, members = [] }) {
         const content = decryptData(item.content, pin);
         text = `🔐 Secure Note: ${title}\n\n${content}`;
     }
-    
-    // Add Signature
     text += SHARE_SIGNATURE;
-
     if (navigator.share) { try { await navigator.share({ text }); } catch (err) { } } 
     else { navigator.clipboard.writeText(text); alert("Copied to clipboard!"); }
   };
 
-  // 👇 UPDATED SHARE LIST FUNCTION
   const handleShareList = async () => {
     if (activeTab !== 'providers') return;
     let text = "🏥 PROVIDER LIST\n\n";
@@ -137,10 +118,7 @@ function KeyInfo({ groupId, userRole, members = [] }) {
         text += `  📞 ${decryptData(item.phone, pin)}\n`;
         text += `  📍 ${decryptData(item.address, pin)}\n\n`;
     });
-    
-    // Add Signature
-    text += `— via The Zen Family Planner\nzenfamilyplanner.com`;
-
+    text += SHARE_SIGNATURE;
     if (navigator.share) { try { await navigator.share({ title: 'Care Provider List', text }); } catch (err) { } } 
     else { navigator.clipboard.writeText(text); alert("List copied to clipboard!"); }
   };
@@ -194,50 +172,26 @@ function KeyInfo({ groupId, userRole, members = [] }) {
   const canEdit = userRole === 'Admin' || userRole === 'Editor';
   const inputBase = "w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all placeholder:text-slate-400";
 
-  // --- UI RENDER ---
-
-  // 1. LOCKED VIEW
+  // LOCKED VIEW
   if (!isUnlocked) {
     return (
       <div className="max-w-md mx-auto mt-12 animate-in zoom-in-95 duration-500">
         <div className="bg-white rounded-3xl shadow-xl p-8 text-center border border-slate-100 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-teal-500 to-teal-700"></div>
-          
-          <div className="inline-flex p-5 bg-teal-50 text-teal-600 rounded-full mb-6 ring-4 ring-teal-50/50">
-            <Lock size={48} />
-          </div>
-          
+          <div className="inline-flex p-5 bg-teal-50 text-teal-600 rounded-full mb-6 ring-4 ring-teal-50/50"><Lock size={48} /></div>
           <h3 className="text-2xl font-bold text-slate-800 mb-2">Secure Vault</h3>
-          <p className="text-slate-500 mb-8 text-sm max-w-xs mx-auto">
-            This information is encrypted end-to-end. Enter your family Master PIN to access.
-          </p>
-          
+          <p className="text-slate-500 mb-8 text-sm max-w-xs mx-auto">This information is encrypted end-to-end. Enter your family Master PIN to access.</p>
           <form onSubmit={handleUnlock} className="space-y-6">
             <div className="relative">
-                <input 
-                    type="password" 
-                    placeholder="••••" 
-                    value={pin} 
-                    onChange={(e) => setPin(e.target.value)} 
-                    className="w-full text-center text-3xl tracking-[0.5em] font-mono px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all text-slate-800"
-                    autoFocus 
-                    maxLength={10}
-                />
+                <input type="password" placeholder="••••" value={pin} onChange={(e) => setPin(e.target.value)} className="w-full text-center text-3xl tracking-[0.5em] font-mono px-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 transition-all text-slate-800" autoFocus maxLength={10} />
             </div>
-            <button 
-                type="submit" 
-                disabled={loading} 
-                className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl shadow-lg shadow-slate-200 transition-transform active:scale-95 flex items-center justify-center gap-2"
-            >
+            <button type="submit" disabled={loading} className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-xl shadow-lg shadow-slate-200 transition-transform active:scale-95 flex items-center justify-center gap-2">
                 {loading ? "Verifying..." : <><Unlock size={20} /> Unlock Vault</>}
             </button>
           </form>
-
           {userRole === 'Admin' && (
               <div className="mt-8 pt-6 border-t border-slate-100">
-                  <button onClick={handleEmergencyReset} className="text-xs text-slate-400 hover:text-rose-500 font-medium flex items-center justify-center gap-1.5 mx-auto transition-colors">
-                    <RefreshCw size={12} /> Forgot PIN? (Emergency Reset)
-                  </button>
+                  <button onClick={handleEmergencyReset} className="text-xs text-slate-400 hover:text-rose-500 font-medium flex items-center justify-center gap-1.5 mx-auto transition-colors"><RefreshCw size={12} /> Forgot PIN? (Emergency Reset)</button>
               </div>
           )}
         </div>
@@ -245,7 +199,7 @@ function KeyInfo({ groupId, userRole, members = [] }) {
     );
   }
 
-  // 2. UNLOCKED VIEW
+  // UNLOCKED VIEW
   const health = activeTab === 'documents' ? getHealthStats() : null;
 
   return (
@@ -262,18 +216,14 @@ function KeyInfo({ groupId, userRole, members = [] }) {
         </div>
         <div className="flex gap-2 w-full md:w-auto">
             {activeTab === 'providers' && items.length > 0 && (
-                <button onClick={handleShareList} className="flex-1 md:flex-none flex items-center justify-center gap-2 text-sm font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-4 py-2.5 rounded-xl transition-colors border border-teal-100">
-                    <Share size={16} /> Share List
-                </button>
+                <button onClick={handleShareList} className="flex-1 md:flex-none flex items-center justify-center gap-2 text-sm font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-4 py-2.5 rounded-xl transition-colors border border-teal-100"><Share size={16} /> Share List</button>
             )}
-            <button onClick={() => { setIsUnlocked(false); setPin(''); }} className="flex-1 md:flex-none text-sm font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-4 py-2.5 rounded-xl transition-colors">
-                Lock 🔒
-            </button>
+            <button onClick={() => { setIsUnlocked(false); setPin(''); }} className="flex-1 md:flex-none text-sm font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-4 py-2.5 rounded-xl transition-colors">Lock 🔒</button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex p-1 bg-slate-100 rounded-xl overflow-x-auto">
+      {/* --- ENHANCED TABS --- */}
+      <div className="flex p-2 bg-teal-100/50 border border-teal-100 rounded-2xl overflow-x-auto gap-2">
         {[{ id: 'documents', label: 'Documents', icon: FileText }, { id: 'providers', label: 'Providers', icon: User }, { id: 'notes', label: 'Secure Notes', icon: StickyNote }].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -282,8 +232,8 @@ function KeyInfo({ groupId, userRole, members = [] }) {
                     key={tab.id} 
                     onClick={() => { setActiveTab(tab.id); setNewItem({}); setTaggedUsers([]); }} 
                     className={`
-                        flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-bold transition-all whitespace-nowrap
-                        ${isActive ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}
+                        flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-extrabold transition-all whitespace-nowrap shadow-sm
+                        ${isActive ? 'bg-white text-teal-800 shadow-md ring-2 ring-teal-500/10' : 'bg-transparent text-slate-500 hover:text-teal-700 hover:bg-white/50'}
                     `}
                 >
                     <Icon size={18} /> {tab.label}
@@ -321,84 +271,24 @@ function KeyInfo({ groupId, userRole, members = [] }) {
             const isMentioned = activeTab === 'notes' && item.mentions?.includes(currentUser.uid);
             return (
               <div key={item.id} className={`relative group p-6 rounded-2xl shadow-sm border transition-all hover:-translate-y-1 hover:shadow-md ${activeTab === 'notes' ? 'bg-amber-50/50 border-amber-100' : 'bg-white border-slate-100'} ${isMentioned ? 'ring-2 ring-amber-400 ring-offset-2' : ''}`}>
-                
-                {/* Action Buttons */}
                 <div className="absolute top-4 right-4 flex gap-2">
-                    <button 
-                        onClick={() => handleShareItem(item)}
-                        className="text-slate-400 hover:text-teal-600 p-2 rounded-full hover:bg-white transition-colors"
-                        title="Share"
-                    >
-                        <Share size={18} />
-                    </button>
-                    {canEdit && (
-                        <button 
-                            onClick={() => handleDelete(item.id)} 
-                            className="text-slate-400 hover:text-rose-500 p-2 rounded-full hover:bg-white transition-colors"
-                            title="Delete"
-                        >
-                            <Trash2 size={18} />
-                        </button>
-                    )}
+                    <button onClick={() => handleShareItem(item)} className="text-slate-400 hover:text-teal-600 p-2 rounded-full hover:bg-white transition-colors" title="Share"><Share size={18} /></button>
+                    {canEdit && <button onClick={() => handleDelete(item.id)} className="text-slate-400 hover:text-rose-500 p-2 rounded-full hover:bg-white transition-colors" title="Delete"><Trash2 size={18} /></button>}
                 </div>
-
-                {/* Content Renderers */}
                 {activeTab === 'documents' && (
                   <div className="space-y-4">
-                    <div className="flex items-start gap-4 pr-16">
-                        <div className="p-3 bg-slate-50 rounded-xl text-slate-400"><FileText size={24}/></div>
-                        <div>
-                            <h4 className="font-bold text-slate-800 text-lg leading-tight">{decryptData(item.name, pin)}</h4>
-                            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Document</span>
-                        </div>
-                    </div>
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-sm text-slate-600 space-y-1">
-                        <p className="flex gap-2"><MapPin size={16} className="shrink-0 text-slate-400"/> {decryptData(item.location, pin)}</p>
-                        {item.contact && <p className="flex gap-2"><User size={16} className="shrink-0 text-slate-400"/> {decryptData(item.contact, pin)}</p>}
-                    </div>
+                    <div className="flex items-start gap-4 pr-16"><div className="p-3 bg-slate-50 rounded-xl text-slate-400"><FileText size={24}/></div><div><h4 className="font-bold text-slate-800 text-lg leading-tight">{decryptData(item.name, pin)}</h4><span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Document</span></div></div>
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-sm text-slate-600 space-y-1"><p className="flex gap-2"><MapPin size={16} className="shrink-0 text-slate-400"/> {decryptData(item.location, pin)}</p>{item.contact && <p className="flex gap-2"><User size={16} className="shrink-0 text-slate-400"/> {decryptData(item.contact, pin)}</p>}</div>
                   </div>
                 )}
-
                 {activeTab === 'providers' && (
                   <div className="space-y-4">
-                    <div className="flex items-start gap-4 pr-16">
-                        <div className="p-3 bg-teal-50 rounded-xl text-teal-600"><User size={24}/></div>
-                        <div>
-                            <h4 className="font-bold text-slate-800 text-lg leading-tight">{decryptData(item.name, pin)}</h4>
-                            <span className="inline-block mt-1 text-xs font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200">{decryptData(item.role, pin)}</span>
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <button onClick={() => openMap(item.address)} className="w-full flex items-center text-left gap-3 bg-white p-3 rounded-xl border border-slate-100 hover:border-teal-200 hover:text-teal-700 transition-colors group/btn">
-                            <MapPin size={18} className="text-slate-400 group-hover/btn:text-teal-500"/>
-                            <span className="text-sm truncate">{decryptData(item.address, pin)}</span>
-                        </button>
-                        <a href={`tel:${decryptData(item.phone, pin)}`} className="w-full flex items-center text-left gap-3 bg-white p-3 rounded-xl border border-slate-100 hover:border-teal-200 hover:text-teal-700 transition-colors group/btn">
-                            <Phone size={18} className="text-slate-400 group-hover/btn:text-teal-500"/>
-                            <span className="text-sm font-mono">{decryptData(item.phone, pin)}</span>
-                        </a>
-                    </div>
+                    <div className="flex items-start gap-4 pr-16"><div className="p-3 bg-teal-50 rounded-xl text-teal-600"><User size={24}/></div><div><h4 className="font-bold text-slate-800 text-lg leading-tight">{decryptData(item.name, pin)}</h4><span className="inline-block mt-1 text-xs font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded border border-slate-200">{decryptData(item.role, pin)}</span></div></div>
+                    <div className="space-y-2"><button onClick={() => openMap(item.address)} className="w-full flex items-center text-left gap-3 bg-white p-3 rounded-xl border border-slate-100 hover:border-teal-200 hover:text-teal-700 transition-colors group/btn"><MapPin size={18} className="text-slate-400 group-hover/btn:text-teal-500"/><span className="text-sm truncate">{decryptData(item.address, pin)}</span></button><a href={`tel:${decryptData(item.phone, pin)}`} className="w-full flex items-center text-left gap-3 bg-white p-3 rounded-xl border border-slate-100 hover:border-teal-200 hover:text-teal-700 transition-colors group/btn"><Phone size={18} className="text-slate-400 group-hover/btn:text-teal-500"/><span className="text-sm font-mono">{decryptData(item.phone, pin)}</span></a></div>
                   </div>
                 )}
-
                 {activeTab === 'notes' && (
-                  <div className="space-y-3">
-                     <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-200/50">
-                         <StickyNote size={18} className="text-amber-600"/>
-                         <h4 className="font-bold text-amber-900">{decryptData(item.title, pin)}</h4>
-                     </div>
-                     <p className="text-sm text-amber-900/80 whitespace-pre-wrap leading-relaxed font-medium font-sans">
-                        {decryptData(item.content, pin)}
-                     </p>
-                     
-                     {isMentioned && (
-                        <div className="pt-2">
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-200 text-amber-800 px-2 py-1 rounded-full">
-                                <AtSign size={10} /> YOU ARE MENTIONED
-                            </span>
-                        </div>
-                     )}
-                  </div>
+                  <div className="space-y-3"><div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-200/50"><StickyNote size={18} className="text-amber-600"/><h4 className="font-bold text-amber-900">{decryptData(item.title, pin)}</h4></div><p className="text-sm text-amber-900/80 whitespace-pre-wrap leading-relaxed font-medium font-sans">{decryptData(item.content, pin)}</p>{isMentioned && <div className="pt-2"><span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-200 text-amber-800 px-2 py-1 rounded-full"><AtSign size={10} /> YOU ARE MENTIONED</span></div>}</div>
                 )}
               </div>
             );
@@ -412,39 +302,20 @@ function KeyInfo({ groupId, userRole, members = [] }) {
             <div className="p-2 bg-white rounded-lg shadow-sm border border-slate-100"><Plus size={20} /></div>
             <h4 className="capitalize">Add New {activeTab.slice(0, -1)}</h4>
           </div>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            
             {activeTab === 'documents' && (
                 <>
                 <div className="relative">
-                    <select 
-                        value={docTypes.includes(newItem.name) ? newItem.name : (newItem.name ? 'Misc' : '')} 
-                        onChange={(e) => {
-                            if (e.target.value === 'Misc') setNewItem({...newItem, name: ''});
-                            else setNewItem({...newItem, name: e.target.value});
-                        }}
-                        className={inputBase}
-                    >
+                    <select value={docTypes.includes(newItem.name) ? newItem.name : (newItem.name ? 'Misc' : '')} onChange={(e) => { if (e.target.value === 'Misc') setNewItem({...newItem, name: ''}); else setNewItem({...newItem, name: e.target.value}); }} className={inputBase}>
                         <option value="" disabled>Select Document Type</option>
                         {docTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
-                    {(!docTypes.includes(newItem.name) && newItem.name !== undefined) && (
-                        <input 
-                            placeholder="Enter Custom Name" 
-                            value={newItem.name} 
-                            onChange={e => setNewItem({...newItem, name: e.target.value})} 
-                            required 
-                            className={`${inputBase} mt-3`} 
-                            autoFocus
-                        />
-                    )}
+                    {(!docTypes.includes(newItem.name) && newItem.name !== undefined) && <input placeholder="Enter Custom Name" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} required className={`${inputBase} mt-3`} autoFocus />}
                 </div>
                 <input placeholder="Physical Location (e.g. Blue Safe)" value={newItem.location || ''} onChange={e => setNewItem({...newItem, location: e.target.value})} required className={inputBase} />
                 <input placeholder="Contact Person (Optional)" value={newItem.contact || ''} onChange={e => setNewItem({...newItem, contact: e.target.value})} className={`${inputBase} md:col-span-2`} />
                 </>
             )}
-
             {activeTab === 'providers' && (
                 <>
                 <input placeholder="Name (e.g. Dr. Smith)" value={newItem.name || ''} onChange={e => setNewItem({...newItem, name: e.target.value})} required className={inputBase} />
@@ -453,12 +324,10 @@ function KeyInfo({ groupId, userRole, members = [] }) {
                 <input placeholder="Phone" value={newItem.phone || ''} onChange={e => setNewItem({...newItem, phone: e.target.value})} required className={inputBase} />
                 </>
             )}
-
             {activeTab === 'notes' && (
                 <>
                 <input placeholder="Note Title" value={newItem.title || ''} onChange={e => setNewItem({...newItem, title: e.target.value})} required className={`${inputBase} md:col-span-2 font-bold`} />
                 <textarea placeholder="Secure Content..." value={newItem.content || ''} onChange={e => setNewItem({...newItem, content: e.target.value})} required rows={4} className={`${inputBase} md:col-span-2 resize-none`} />
-                
                 <div className="md:col-span-2 bg-white p-4 rounded-xl border border-slate-100">
                     <p className="text-xs font-bold text-slate-400 uppercase mb-3 flex items-center gap-1"><AtSign size={12}/> Notify Team Members</p>
                     {members.length > 0 ? (
@@ -473,9 +342,7 @@ function KeyInfo({ groupId, userRole, members = [] }) {
             )}
           </div>
           <div className="flex justify-end">
-            <button type="submit" className="bg-slate-900 text-white px-8 py-3 rounded-xl hover:bg-slate-800 transition-colors font-bold shadow-lg shadow-slate-200 flex items-center gap-2">
-                <Lock size={18} /> Encrypt & Save
-            </button>
+            <button type="submit" className="bg-slate-900 text-white px-8 py-3 rounded-xl hover:bg-slate-800 transition-colors font-bold shadow-lg shadow-slate-200 flex items-center gap-2"><Lock size={18} /> Encrypt & Save</button>
           </div>
         </form>
       )}

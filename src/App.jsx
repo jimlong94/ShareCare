@@ -1,5 +1,4 @@
-// src/App.jsx - FINAL (Help Modal Integrated)
-
+// src/App.jsx
 import { useState, useEffect } from 'react';
 import Dashboard from './components/Dashboard';
 import NewTaskModal from './components/NewTaskModal';
@@ -12,32 +11,25 @@ import WellnessCenter from './components/WellnessCenter';
 import TaskCard from './components/TaskCard'; 
 import GroupSettingsModal from './components/GroupSettingsModal'; 
 import NoGroupState from './components/NoGroupState';
-import HelpModal from './components/HelpModal'; // 👈 NEW IMPORT
-import useFcmToken from './hooks/useFcmToken'; // 👈 NEW IMPORT
+import HelpModal from './components/HelpModal'; 
+import useFcmToken from './hooks/useFcmToken'; 
 import { useAuth } from './AuthContext';
 import { db } from './firebase'; 
 import { 
-  collection, 
-  addDoc, 
-  query,          
-  orderBy,        
-  onSnapshot,
-  doc,             
-  updateDoc,       
-  where,           
-  deleteDoc,       
+  collection, addDoc, query, orderBy, onSnapshot,
+  doc, updateDoc, where, deleteDoc, 
 } from 'firebase/firestore'; 
-import { Users, Leaf, HelpCircle } from 'lucide-react'; // 👈 Added HelpCircle
+import { Users, Leaf, HelpCircle, LogOut } from 'lucide-react';
 
 function App() {
   const { currentUser, logout, hasAcceptedHipaa, userProfile } = useAuth(); 
-  useFcmToken(); // 👈 THIS LINE STARTS THE PROCESS
+  useFcmToken(); 
 
   // --- UI State ---
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false); 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false); 
-  const [isHelpOpen, setIsHelpOpen] = useState(false); // 👈 NEW STATE
+  const [isHelpOpen, setIsHelpOpen] = useState(false); 
   const [taskToEdit, setTaskToEdit] = useState(null);
   const [taskToView, setTaskToView] = useState(null);
 
@@ -45,24 +37,17 @@ function App() {
   const [tasks, setTasks] = useState([]); 
   const [members, setMembers] = useState([]); 
   const [secureMentions, setSecureMentions] = useState([]);
-  
-  // Retry Trigger for Race Conditions
   const [retryTrigger, setRetryTrigger] = useState(0);
   
   // --- Navigation & Filters ---
   const [currentView, setCurrentView] = useState('dashboard');
   const [filterAssignee, setFilterAssignee] = useState('All');
-  const [filterCategory, setFilterCategory] = useState('All');
-  const [filterStatus, setFilterStatus] = useState('All');
-  const [sortField, setSortField] = useState('createdAt'); 
-  const [sortDirection, setSortDirection] = useState('desc'); 
+  
+  const sortField = 'createdAt';
+  const sortDirection = 'desc';
 
   const currentGroupId = userProfile.groupId;
   const currentUserRole = userProfile.role;
-
-  // ... inside App() function ...
-  
-  // Offline Detection
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -70,45 +55,34 @@ function App() {
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
-  
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
 
-  // --- Helper: Auto-Retry on Permission Failures ---
   const handleSyncError = (err, source) => {
-    console.log(`${source} sync error (likely race condition), retrying in 1s...`, err);
+    console.log(`${source} sync error, retrying...`, err);
     setTimeout(() => setRetryTrigger(prev => prev + 1), 1000);
   };
 
-  // 0. RESET VIEW ON LOGIN
   useEffect(() => {
-    if (currentUser) {
-      setCurrentView('dashboard');
-    }
+    if (currentUser) setCurrentView('dashboard');
   }, [currentUser]);
 
-  // --- 1. Fetch Real Group Members ---
+  // --- 1. Fetch Members ---
   useEffect(() => {
     if (currentUser && currentGroupId) {
       const q = query(collection(db, "users"), where('groupId', '==', currentGroupId));
-      
-      const unsubscribe = onSnapshot(q, 
-        (snapshot) => {
+      const unsubscribe = onSnapshot(q, (snapshot) => {
           const memberList = snapshot.docs.map(doc => {
             const data = doc.data();
-            const name = data.displayName || data.email.split('@')[0]; 
-            return { id: doc.id, name, email: data.email, role: data.role };
+            // 🛡️ CRASH FIX: Safe navigation here too
+            const name = data?.displayName || data?.email?.split('@')[0] || 'Member'; 
+            return { id: doc.id, name, email: data?.email, role: data?.role };
           });
           setMembers(memberList);
-        },
-        (error) => handleSyncError(error, "Members")
-      );
-      
+        }, (error) => handleSyncError(error, "Members"));
       return () => unsubscribe();
     }
   }, [currentUser, currentGroupId, retryTrigger]);
@@ -116,44 +90,28 @@ function App() {
   // --- 2. Fetch Tasks ---
   useEffect(() => {
     if (currentUser && hasAcceptedHipaa && currentGroupId) {
-      
       let tasksCollectionRef = collection(db, "tasks");
       let q = query(tasksCollectionRef, where('groupId', '==', currentGroupId)); 
-
-      if (filterCategory !== 'All') q = query(q, where('category', '==', filterCategory));
-      if (filterStatus !== 'All') q = query(q, where('status', '==', filterStatus));
-      
       q = query(q, orderBy(sortField, sortDirection));
 
-      const unsubscribe = onSnapshot(q, 
-        (querySnapshot) => {
+      const unsubscribe = onSnapshot(q, (querySnapshot) => {
           const tasksArray = [];
-          querySnapshot.forEach((d) => {
-            tasksArray.push({ id: d.id, ...d.data() });
-          });
+          querySnapshot.forEach((d) => tasksArray.push({ id: d.id, ...d.data() }));
           
           if (filterAssignee !== 'All') {
               setTasks(tasksArray.filter(t => t.assignee === filterAssignee || t.assigneeId === filterAssignee));
           } else {
               setTasks(tasksArray);
           }
-        },
-        (error) => handleSyncError(error, "Tasks")
-      );
-      
+        }, (error) => handleSyncError(error, "Tasks"));
       return () => unsubscribe();
     }
-  }, [currentUser, hasAcceptedHipaa, currentGroupId, filterAssignee, filterCategory, filterStatus, sortField, sortDirection, retryTrigger]);
+  }, [currentUser, hasAcceptedHipaa, currentGroupId, filterAssignee, sortField, sortDirection, retryTrigger]);
 
-  // --- 3. Fetch Secure Note Mentions ---
+  // --- 3. Fetch Secure Mentions ---
   useEffect(() => {
     if (currentUser && currentGroupId) {
-      const q = query(
-        collection(db, "key_notes"), 
-        where('groupId', '==', currentGroupId),
-        where('mentions', 'array-contains', currentUser.uid)
-      );
-
+      const q = query(collection(db, "key_notes"), where('groupId', '==', currentGroupId), where('mentions', 'array-contains', currentUser.uid));
       const unsubscribe = onSnapshot(q, (snapshot) => {
         const mentions = [];
         snapshot.forEach((doc) => {
@@ -163,157 +121,89 @@ function App() {
           }
         });
         setSecureMentions(mentions);
-      },
-      (error) => handleSyncError(error, "SecureNotes")
-      );
+      }, (error) => handleSyncError(error, "SecureNotes"));
       return () => unsubscribe();
     }
   }, [currentUser, currentGroupId, retryTrigger]);
 
-  // --- Handlers ---
-  const handleTaskClick = (task) => { setTaskToView(task); };
-  
-  const handleEditClick = (task) => {
-    if (currentUserRole !== 'Admin' && currentUserRole !== 'Editor') {
-        alert("Permission Denied"); return;
+  const handleNavigation = (view, filterUid = null) => {
+    setCurrentView(view);
+    if (view === 'tasks' && filterUid) {
+      setFilterAssignee(filterUid);
     }
-    setTaskToEdit(task);
-    setIsTaskModalOpen(true);
   };
-  
+
+  const handleTaskClick = (task) => setTaskToView(task);
+  const handleEditClick = (task) => { setTaskToEdit(task); setIsTaskModalOpen(true); };
   const handleDelete = async (taskId, taskTitle) => {
-    if (currentUserRole !== 'Admin' && currentUserRole !== 'Editor') {
-        alert("Permission Denied"); return;
-    }
     if (!window.confirm(`Delete "${taskTitle}"?`)) return;
-    try { await deleteDoc(doc(db, "tasks", taskId)); } 
-    catch (e) { console.error(e); alert("Failed to delete task."); }
+    try { await deleteDoc(doc(db, "tasks", taskId)); } catch (e) { console.error(e); }
   };
-  
   const handleCloseTaskModal = () => { setIsTaskModalOpen(false); setTaskToEdit(null); };
 
   const handleSave = async (submittedTask) => {
     if (!hasAcceptedHipaa || !currentGroupId) return;
     try {
       const dataToSave = {
-        title: submittedTask.title,
-        assignee: submittedTask.assignee,     
-        assigneeId: submittedTask.assigneeId, 
-        category: submittedTask.category,
-        status: submittedTask.status,
-        dueDate: submittedTask.dueDate, 
-        updates: submittedTask.updates, 
+        title: submittedTask.title, assignee: submittedTask.assignee, assigneeId: submittedTask.assigneeId, 
+        category: submittedTask.category, status: submittedTask.status, dueDate: submittedTask.dueDate, updates: submittedTask.updates, 
       };
-      
-      if (submittedTask.id) {
-        await updateDoc(doc(db, "tasks", submittedTask.id), dataToSave);
-      } else {
-        await addDoc(collection(db, "tasks"), {
-          ...dataToSave,
-          createdBy: currentUser.email,
-          createdAt: new Date(),
-          groupId: currentGroupId,
-        });
-      }
+      if (submittedTask.id) await updateDoc(doc(db, "tasks", submittedTask.id), dataToSave);
+      else await addDoc(collection(db, "tasks"), { ...dataToSave, createdBy: currentUser.email, createdAt: new Date(), groupId: currentGroupId });
       handleCloseTaskModal();
     } catch (e) { console.error(e); alert("Save failed."); }
   };
   
-  // --- RENDER LOGIC ---
   if (!currentUser) return <Auth />;
   if (hasAcceptedHipaa === false) return <OnboardingWizard />;
   if (!currentGroupId) return <NoGroupState />;
   
-  const categories = ['All', 'Appointment', 'Household', 'Misc'];
-
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 pb-20">
-      {/* OFFLINE BANNER */}
-      {!isOnline && (
-        <div className="bg-slate-800 text-white text-xs font-bold text-center py-1">
-          You are offline. Changes will sync when connection returns.
-        </div>
-      )}
+      {!isOnline && <div className="bg-slate-800 text-white text-xs font-bold text-center py-1">You are offline. Changes will sync when connection returns.</div>}
       
-      {/* HEADER SECTION */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-4 md:px-6">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            
-            {/* Branding & Nav */}
             <div className="flex flex-col items-center md:items-start gap-4 w-full md:w-auto">
-              
               <div className="flex items-center gap-2.5">
-                  <div className="bg-teal-600 text-white p-2 rounded-xl shadow-sm">
-                    <Leaf size={22} fill="currentColor" className="text-teal-100" />
-                  </div>
+                  <div className="bg-teal-600 text-white p-2 rounded-xl shadow-sm"><Leaf size={22} fill="currentColor" className="text-teal-100" /></div>
                   <h1 className="text-2xl font-bold text-slate-800 tracking-tight">The Zen Family Planner</h1>
               </div>
-
-              <div className="flex p-1.5 bg-slate-100 rounded-xl overflow-x-auto w-full md:w-auto">
-                {['dashboard', 'tasks', 'keyinfo', 'wellness'].map(view => {
-                    const isActive = currentView === view;
-                    const label = view === 'keyinfo' ? 'Key Info' : view;
-                    return (
-                        <button 
-                          key={view}
-                          onClick={() => setCurrentView(view)}
-                          className={`
-                            px-5 py-2 rounded-lg text-sm font-bold capitalize transition-all duration-200 whitespace-nowrap
-                            ${isActive 
-                              ? 'bg-white text-teal-700 shadow-sm' 
-                              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}
-                          `}
-                        >
-                          {label}
-                        </button>
-                    )
-                })}
+              
+              {/* --- ENHANCED NAVIGATION BAR --- */}
+              <div className="flex p-2 bg-teal-100/50 border border-teal-100 rounded-2xl overflow-x-auto w-full md:w-auto gap-2">
+                {['dashboard', 'tasks', 'keyinfo', 'wellness'].map(view => (
+                    <button 
+                      key={view} 
+                      onClick={() => handleNavigation(view, view === 'tasks' ? 'All' : null)}
+                      className={`
+                        px-6 py-2.5 rounded-xl text-sm font-extrabold capitalize transition-all duration-200 whitespace-nowrap shadow-sm
+                        ${currentView === view 
+                          ? 'bg-white text-teal-800 shadow-md transform scale-100 ring-2 ring-teal-500/10' 
+                          : 'bg-transparent text-slate-500 hover:text-teal-700 hover:bg-white/50'}
+                      `}
+                    >
+                      {view === 'keyinfo' ? 'Key Info' : view}
+                    </button>
+                ))}
               </div>
             </div>
-
-            {/* Right Side: User Controls & Actions */}
             <div className="flex flex-col items-end gap-3 w-full md:w-auto">
                 <div className="flex items-center gap-3 text-sm">
-                    
-                    {/* HELP BUTTON */}
-                    <button 
-                        onClick={() => setIsHelpOpen(true)}
-                        className="text-slate-400 hover:text-teal-600 transition-colors p-2 rounded-full hover:bg-slate-100"
-                        title="How to use"
-                    >
-                        <HelpCircle size={20} />
-                    </button>
-
+                    <button onClick={() => setIsHelpOpen(true)} className="text-slate-400 hover:text-teal-600 transition-colors p-2 rounded-full hover:bg-slate-100"><HelpCircle size={20} /></button>
                     <span className="text-slate-400 font-medium px-2 py-1 bg-slate-50 rounded-lg border border-slate-100">{currentUserRole}</span>
-                    
                     {currentUserRole === 'Admin' && currentGroupId && (
                         <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => setIsSettingsOpen(true)}
-                              className="text-slate-500 hover:text-teal-600 p-2 rounded-lg hover:bg-slate-100 transition-colors"
-                              title="Manage Team"
-                            >
-                              <Users size={20} />
-                            </button>
+                            <button onClick={() => setIsSettingsOpen(true)} className="text-slate-500 hover:text-teal-600 p-2 rounded-lg hover:bg-slate-100 transition-colors"><Users size={20} /></button>
                             <span className="text-slate-200 h-4 w-px bg-slate-300"></span>
-                            <button 
-                              onClick={() => setIsInviteModalOpen(true)}
-                              className="text-slate-600 hover:text-teal-600 font-bold text-xs uppercase tracking-wide hover:underline decoration-teal-200 underline-offset-4"
-                            >
-                              Invite
-                            </button>
+                            <button onClick={() => setIsInviteModalOpen(true)} className="text-slate-600 hover:text-teal-600 font-bold text-xs uppercase tracking-wide hover:underline decoration-teal-200 underline-offset-4">Invite</button>
                         </div>
                     )}
-                    <button onClick={logout} className="text-slate-400 hover:text-rose-500 font-medium ml-2 transition-colors">Log Out</button>
+                    <button onClick={logout} className="text-slate-400 hover:text-rose-500 font-medium ml-2"><LogOut size={16}/></button>
                 </div>
-                
-                {/* Primary Action Button */}
                 {currentView === 'tasks' && (
-                   <button 
-                      onClick={() => { setTaskToEdit(null); setIsTaskModalOpen(true); }}
-                      className="w-full md:w-auto bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-teal-100 transition-transform active:scale-95 flex items-center justify-center gap-2"
-                   >
+                   <button onClick={() => { setTaskToEdit(null); setIsTaskModalOpen(true); }} className="w-full md:w-auto bg-teal-600 hover:bg-teal-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-teal-100 transition-transform active:scale-95 flex items-center justify-center gap-2">
                       <span className="text-lg leading-none">+</span> New Task
                   </button>
                 )}
@@ -322,47 +212,19 @@ function App() {
         </div>
       </header>
 
-      {/* MAIN CONTENT AREA */}
       <main className="max-w-6xl mx-auto px-4 py-8 md:px-6">
         {currentView === 'dashboard' && (
-          <Dashboard 
-            tasks={tasks} 
-            currentUser={currentUser} 
-            members={members}
-            secureMentions={secureMentions}
-            onViewChange={setCurrentView} 
-          />
+          <Dashboard tasks={tasks} currentUser={currentUser} members={members} secureMentions={secureMentions} onNavigate={handleNavigation} />
         )}
 
         {currentView === 'tasks' && (
           <div className="space-y-6 animate-in fade-in">
-            {/* Filters Bar */}
-            <div className="flex flex-col md:flex-row gap-4 bg-white p-5 rounded-2xl border border-slate-100 shadow-sm items-center">
-                <div className="w-full md:w-auto flex gap-2 overflow-x-auto pb-2 md:pb-0">
-                    <select className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20" value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
-                        <option value="All">All Assignees</option>
-                        {members.map(m => (
-                            <option key={m.id} value={m.name}>{m.name}</option>
-                        ))}
-                    </select>
-                    <select className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
-                        {categories.map(c => <option key={c} value={c}>{c === 'All' ? 'Category (All)' : c}</option>)}
-                    </select>
-                </div>
-                
-                <div className="hidden md:block h-8 w-px bg-slate-200 mx-2"></div>
-                
-                <div className="w-full md:w-auto flex gap-2">
-                    <select className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20" value={sortField} onChange={(e) => setSortField(e.target.value)}>
-                        <option value="createdAt">Date Created</option>
-                        <option value="dueDate">Due Date</option>
-                        <option value="assignee">Assignee</option>
-                    </select>
-                    <select className="flex-1 px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-teal-500/20" value={sortDirection} onChange={(e) => setSortDirection(e.target.value)}>
-                        <option value="desc">Descending</option>
-                        <option value="asc">Ascending</option>
-                    </select>
-                </div>
+            {/* Context Banner - Replaces Filters */}
+            <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+               <h2 className="text-lg font-bold text-slate-700">
+                 {filterAssignee === 'All' ? 'All Family Tasks' : 'My Assigned Tasks'}
+               </h2>
+               <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">Sorted by Date</div>
             </div>
 
             {tasks.length === 0 ? (
@@ -383,7 +245,6 @@ function App() {
         {currentView === 'wellness' && <WellnessCenter />}
       </main>
       
-      {/* MODALS */}
       {isHelpOpen && <HelpModal onClose={() => setIsHelpOpen(false)} />}
       {isTaskModalOpen && <NewTaskModal onClose={handleCloseTaskModal} onSave={handleSave} members={members} task={taskToEdit} />}
       {isInviteModalOpen && <InviteModal onClose={() => setIsInviteModalOpen(false)} currentGroupId={currentGroupId} />}
