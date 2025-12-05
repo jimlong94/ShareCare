@@ -27,6 +27,36 @@
         "source": "**",
         "destination": "/index.html"
       }
+    ],
+    // 👇 NEW SECTION: Cache Control Headers
+    "headers": [
+      {
+        "source": "**/*.@(js|css|jpg|jpeg|png|gif|svg|ico)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "service-worker.js", 
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      }
     ]
   }
 }

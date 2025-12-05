@@ -37,7 +37,9 @@ function InviteModal({ onClose, currentGroupId }) {
   };
 
   const copyToClipboard = () => {
-    navigator.clipboard.writeText(inviteToken);
+    const message = `You've been invited to The Zen Family Planner!\n\n1. Go to: https://zenfamilyplanner.com\n2. Click 'Sign Up' then 'Join with Code'\n3. Enter this code: ${inviteToken}\n\nThis code expires in 7 days.`;
+    
+    navigator.clipboard.writeText(message);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -89,29 +91,32 @@ function InviteModal({ onClose, currentGroupId }) {
           ) : (
             <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
                 <div className="text-center space-y-2">
-                    <div className="inline-flex p-3 bg-teal-50 text-teal-600 rounded-full mb-1">
+                    <div className="inline-flex p-3 bg-amber-100 text-amber-600 rounded-full mb-1 shadow-sm ring-4 ring-amber-50">
                         <Ticket size={32} />
                     </div>
-                    <h3 className="text-lg font-bold text-slate-800">Invitation Ready</h3>
+                    <h3 className="text-lg font-bold text-slate-800">Golden Ticket Ready</h3>
                     <p className="text-xs text-slate-500">Share this code with your family member.</p>
                 </div>
                 
+                {/* The Ticket UI */}
                 <div className="relative group cursor-pointer" onClick={copyToClipboard}>
-                    <div className="absolute inset-0 bg-teal-100 rounded-xl transform translate-y-1 translate-x-1 transition-transform group-hover:translate-x-2 group-hover:translate-y-2"></div>
-                    <div className="relative bg-white border-2 border-dashed border-teal-200 rounded-xl p-4 flex items-center justify-between hover:border-teal-400 transition-colors">
-                        <code className="font-mono text-2xl font-bold text-slate-800 tracking-widest pl-2">
-                            {inviteToken}
-                        </code>
-                        <div className={`p-2 rounded-lg transition-colors ${copied ? 'bg-teal-50 text-teal-600' : 'bg-slate-50 text-slate-400 group-hover:text-teal-500'}`}>
+                    <div className="absolute inset-0 bg-teal-600 rounded-xl transform translate-y-1 translate-x-1 transition-transform group-hover:translate-x-1.5 group-hover:translate-y-1.5 opacity-20"></div>
+                    <div className="relative bg-white border-2 border-teal-100 rounded-xl p-1 flex items-center justify-between hover:border-teal-300 transition-colors">
+                        <div className="bg-slate-50 flex-1 p-3 rounded-lg border border-slate-100 text-center overflow-hidden">
+                            {/* UPDATED: Responsive font size and break-all to prevent overflow */}
+                            <code className="font-mono text-lg sm:text-2xl font-bold text-slate-800 tracking-widest break-all">
+                                {inviteToken}
+                            </code>
+                        </div>
+                        <div className={`mx-3 p-2 rounded-lg transition-colors ${copied ? 'bg-teal-50 text-teal-600' : 'bg-white text-slate-400 group-hover:text-teal-500'}`}>
                             {copied ? <Check size={20} /> : <Copy size={20} />}
                         </div>
                     </div>
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs text-slate-500 space-y-2">
-                    <p className="flex gap-2"><span className="font-bold text-slate-400">1.</span> Send this code to them.</p>
-                    <p className="flex gap-2"><span className="font-bold text-slate-400">2.</span> They select "Join Hub" at signup.</p>
-                    <p className="flex gap-2"><span className="font-bold text-slate-400">3.</span> Code expires in 7 days.</p>
+                    <div className="text-center mt-2">
+                        <span className={`text-[10px] font-bold uppercase tracking-wider transition-colors ${copied ? 'text-teal-600' : 'text-slate-400'}`}>
+                            {copied ? 'Copied to Clipboard!' : 'Tap to Copy Code & Instructions'}
+                        </span>
+                    </div>
                 </div>
 
                 <button

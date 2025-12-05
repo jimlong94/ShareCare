@@ -4,11 +4,17 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  base: '/', // 👈 CRITICAL: Forces absolute paths
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate', // 👈 Updates the app automatically when you deploy changes
+      registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+      workbox: {
+        cleanupOutdatedCaches: true,
+        skipWaiting: true,
+        clientsClaim: true,
+      },
       manifest: {
         name: "The Zen Family Planner",
         short_name: "Zen Planner",
@@ -37,9 +43,9 @@ export default defineConfig({
     port: 5173,
     host: true
   },
-  root: '.', 
   build: {
     outDir: 'dist',
-    assetsDir: '.',
+    // 👈 REMOVED: assetsDir: '.' (Let it default to 'assets' folder for cleaner structure)
+    emptyOutDir: true, // 👈 NEW: Ensures we delete the old 'dist' folder before building
   }
 });

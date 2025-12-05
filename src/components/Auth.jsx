@@ -105,7 +105,7 @@ function Auth() {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-xl w-full max-w-4xl flex overflow-hidden min-h-[600px] border border-slate-100">
         
-        {/* LEFT: Branding Area (Hidden on mobile) */}
+        {/* LEFT: Branding Area */}
         <div className="hidden md:flex w-1/2 bg-gradient-to-br from-teal-600 to-teal-800 p-12 flex-col justify-between relative overflow-hidden text-white">
             <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-white opacity-10"></div>
             <div className="absolute bottom-0 left-0 -ml-10 -mb-10 w-40 h-40 rounded-full bg-teal-400 opacity-20"></div>
@@ -114,7 +114,8 @@ function Auth() {
                 <div className="inline-flex p-3 bg-white/10 rounded-2xl mb-6 backdrop-blur-sm border border-white/20">
                     <ShieldCheck size={32} className="text-teal-50" />
                 </div>
-                <h1 className="text-4xl font-bold mb-4 tracking-tight">ShareCare</h1>
+                {/* UPDATED TITLE */}
+                <h1 className="text-4xl font-bold mb-4 tracking-tight">The Zen Family Planner</h1>
                 <p className="text-teal-100 text-lg leading-relaxed opacity-90">
                     Secure logistics for family caregivers. Coordinate tasks, share documents, and keep everyone on the same page.
                 </p>
@@ -134,7 +135,8 @@ function Auth() {
                 <div className="inline-flex p-3 bg-teal-50 text-teal-600 rounded-xl mb-3">
                     <ShieldCheck size={32} />
                 </div>
-                <h1 className="text-2xl font-bold text-slate-800">ShareCare</h1>
+                {/* UPDATED MOBILE TITLE */}
+                <h1 className="text-2xl font-bold text-slate-800">Zen Planner</h1>
             </div>
 
             {/* Pill Toggle */}
