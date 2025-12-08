@@ -4,16 +4,28 @@ import { db } from '../firebase';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { 
   Sun, Moon, Coffee, CheckCircle2, Calendar, ArrowRight, 
-  Activity, Bell, ShieldAlert, ChevronDown, UserCheck
+  Activity, Bell, ShieldAlert, ChevronDown, UserCheck, X // 👈 Added X here
 } from 'lucide-react';
+import useFcmToken from '../hooks/useFcmToken';
 
 function Dashboard({ tasks, currentUser, members, secureMentions = [], onNavigate }) {
   
   const [isBeaconExpanded, setIsBeaconExpanded] = useState(false);
+  const [showInstallModal, setShowInstallModal] = useState(false); // 👈 New State
   
-  // 🛡️ CRASH FIX: We use ?. to safely check if email exists before splitting it
+  // Get permission status and function
+  const { permission, requestPermission, sendTest } = useFcmToken();
+
+  // 1. Detect Mobile
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+
+  // 2. Detect "Standalone" (Is the app installed?)
+  const isStandalone = typeof window !== 'undefined' && (
+      window.matchMedia('(display-mode: standalone)').matches || 
+      window.navigator.standalone === true
+  );
+
   const myName = currentUser?.email?.split('@')[0] || 'Friend'; 
-  
   const hour = new Date().getHours();
   
   // --- GREETING LOGIC ---
@@ -27,7 +39,6 @@ function Dashboard({ tasks, currentUser, members, secureMentions = [], onNavigat
   tasks.forEach(task => {
       if (task.updates) {
           task.updates.forEach(update => {
-              // 🛡️ Safety check added here too
               if (update.mentions?.includes(currentUser?.uid) && !update.acknowledgedBy?.includes(currentUser?.uid)) {
                   myTaskMentions.push({ taskId: task.id, taskTitle: task.title, note: update.text, user: update.user });
               }
@@ -41,7 +52,6 @@ function Dashboard({ tasks, currentUser, members, secureMentions = [], onNavigat
     } catch (e) { console.error(e); }
   };
 
-  // 🛡️ Safety check for assigneeId
   const urgentTasks = tasks.filter(t => t.status === 'Waiting'); 
   const myActiveTasks = tasks.filter(t => t.assigneeId === currentUser?.uid && t.status !== 'Done');
   const upcomingTasks = [...tasks].filter(t => t.status !== 'Done').sort((a, b) => new Date(a.dueDate || '2099-12-31') - new Date(b.dueDate || '2099-12-31')).slice(0, 3);
@@ -56,6 +66,53 @@ function Dashboard({ tasks, currentUser, members, secureMentions = [], onNavigat
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-12">
       
+      {/* 🟢 SCENARIO A: ON MOBILE + IN BROWSER -> "INSTALL ME" */}
+      {isMobile && !isStandalone && (
+        <div className="bg-teal-900 text-white p-4 rounded-2xl flex items-center justify-between shadow-lg animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+             <div className="p-2 bg-white/10 rounded-xl"><span className="text-xl">📲</span></div>
+             <div>
+               <p className="font-bold text-sm">Install the App</p>
+               <p className="text-xs text-teal-200">Add to Home Screen for the best experience.</p>
+             </div>
+          </div>
+          <button 
+             onClick={() => setShowInstallModal(true)}
+             className="bg-white text-teal-900 px-4 py-2 rounded-xl text-xs font-bold hover:bg-teal-50"
+          >
+             Install
+          </button>
+        </div>
+      )}
+
+      {/* 🔵 SCENARIO B: ON MOBILE + INSTALLED + NO PERMS -> "NOTIFY ME" */}
+      {isMobile && isStandalone && permission === 'default' && (
+        <div className="bg-slate-900 text-white p-4 rounded-2xl flex items-center justify-between shadow-lg animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-white/20 rounded-xl"><Bell size={20} /></div>
+            <div>
+              <p className="font-bold text-sm">Enable Notifications</p>
+              <p className="text-xs text-slate-300">Tap to get buzzed for tasks.</p>
+            </div>
+          </div>
+          <button 
+            onClick={requestPermission} 
+            className="bg-white text-slate-900 px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-100"
+          >
+            Enable
+          </button>
+        </div>
+      )}
+
+      {/* 🟣 SCENARIO C: TEST PING (If installed & allowed) */}
+      {isMobile && isStandalone && permission === 'granted' && (
+         <div className="flex justify-end -mb-4">
+            <button onClick={sendTest} className="text-[10px] font-bold text-slate-400 hover:text-teal-600 flex items-center gap-1 opacity-50 hover:opacity-100 transition-opacity">
+               <Bell size={12} /> Test Signal
+            </button>
+         </div>
+      )}
+
       {/* --- HERO SECTION --- */}
       <div className="relative bg-gradient-to-br from-teal-600 to-teal-800 rounded-3xl p-5 md:p-8 text-white shadow-xl overflow-hidden transition-all">
         <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-white opacity-5 pointer-events-none"></div>
@@ -67,31 +124,19 @@ function Dashboard({ tasks, currentUser, members, secureMentions = [], onNavigat
           </div>
           
           <div className="mb-4 md:mb-6">
-             {/* Mobile: Short & Sweet */}
              <h1 className="text-2xl font-bold tracking-tight md:hidden">
                 Hello, {myName}.
              </h1>
-
-             {/* Desktop: The Full Vibe */}
              <h1 className="hidden md:block text-3xl font-bold tracking-tight leading-tight max-w-xl">
                 {getHeroMessage()}
              </h1>
           </div>
           
           <div className="flex gap-2 md:gap-4">
-             {/* "See My Tasks" Button */}
-             <button 
-                onClick={() => onNavigate('tasks', currentUser?.uid)} 
-                className="flex-1 md:flex-none bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/40 text-white px-4 py-3 md:px-6 md:py-3 rounded-xl font-bold text-sm md:text-base shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2"
-             >
+             <button onClick={() => onNavigate('tasks', currentUser?.uid)} className="flex-1 md:flex-none bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/40 text-white px-4 py-3 md:px-6 md:py-3 rounded-xl font-bold text-sm md:text-base shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2">
                 <UserCheck size={18} /> <span className="hidden xs:inline">My Tasks</span><span className="xs:hidden">Mine</span>
              </button>
-
-             {/* "View Task Board" Button */}
-             <button 
-                onClick={() => onNavigate('tasks', 'All')} 
-                className="flex-1 md:flex-none bg-white text-teal-800 px-4 py-3 md:px-6 md:py-3 rounded-xl font-bold text-sm md:text-base shadow-lg shadow-teal-900/20 active:scale-95 transition-transform flex items-center justify-center gap-2"
-             >
+             <button onClick={() => onNavigate('tasks', 'All')} className="flex-1 md:flex-none bg-white text-teal-800 px-4 py-3 md:px-6 md:py-3 rounded-xl font-bold text-sm md:text-base shadow-lg shadow-teal-900/20 active:scale-95 transition-transform flex items-center justify-center gap-2">
                 Task Board <ArrowRight size={16} />
              </button>
           </div>
@@ -133,7 +178,7 @@ function Dashboard({ tasks, currentUser, members, secureMentions = [], onNavigat
           </div>
       )}
 
-      {/* --- STATS GRID (HIDDEN ON MOBILE) --- */}
+      {/* --- STATS GRID --- */}
       <div className="hidden md:grid grid-cols-2 lg:grid-cols-4 gap-3">
          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between h-32">
             <div className="p-2 bg-slate-50 w-fit rounded-xl text-slate-400"><CheckCircle2 size={20} /></div>
@@ -179,6 +224,38 @@ function Dashboard({ tasks, currentUser, members, secureMentions = [], onNavigat
           </div>
         </div>
        </div>
+
+      {/* 👇 THE INSTALL MODAL (Simple Instructions) */}
+      {showInstallModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-in fade-in">
+            <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl relative">
+                <button onClick={() => setShowInstallModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={24}/></button>
+                <div className="text-center space-y-4">
+                    <div className="w-16 h-16 bg-teal-100 text-teal-600 rounded-2xl mx-auto flex items-center justify-center mb-2">
+                        <span className="text-3xl">📲</span>
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800">Install App</h3>
+                    <p className="text-sm text-slate-500 leading-relaxed">
+                        To get notifications and quick access, add this app to your home screen.
+                    </p>
+                    
+                    <div className="bg-slate-50 p-4 rounded-xl text-left space-y-3 text-sm border border-slate-100">
+                        <div className="flex gap-3">
+                            <span className="font-bold text-slate-400">1.</span>
+                            <span className="text-slate-700">Tap the <span className="font-bold">Share</span> button <span className="inline-block px-1.5 py-0.5 bg-slate-200 rounded text-[10px]">⎋</span> in your browser bar.</span>
+                        </div>
+                        <div className="flex gap-3">
+                            <span className="font-bold text-slate-400">2.</span>
+                            <span className="text-slate-700">Scroll down and tap <span className="font-bold">Add to Home Screen</span>.</span>
+                        </div>
+                    </div>
+
+                    <button onClick={() => setShowInstallModal(false)} className="w-full py-3 bg-teal-600 text-white rounded-xl font-bold">Got it</button>
+                </div>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 }

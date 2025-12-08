@@ -1,84 +1,63 @@
-// src/hooks/useFcmToken.js - FIXED
 import { useEffect, useState } from 'react';
-import { getToken, onMessage } from 'firebase/messaging';
+import { getToken } from 'firebase/messaging';
 import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { messaging, db } from '../firebase';
+import { httpsCallable } from 'firebase/functions'; // 👈 New Import
+import { messaging, db, functions } from '../firebase'; // 👈 Import functions
 import { useAuth } from '../AuthContext';
 
-// ⚠️ REPLACE THIS WITH YOUR GENERATED KEY PAIR FROM FIREBASE CONSOLE
 const VAPID_KEY = "BErIFYhGyXjRX2YBCjRXF2xV84c9x0x2djrYTQh5yDgBMad7KPYsxLtcLvEElo2NBGH4WT2DWBfQQxWHpNkik7g"; 
 
 const useFcmToken = () => {
   const { currentUser } = useAuth();
-  const [notificationPermission, setNotificationPermission] = useState(Notification.permission);
+  const [permission, setPermission] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  );
 
-  useEffect(() => {
-    const retrieveToken = async () => {
-      try {
-        if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-          
-          // 1. Request Permission
-          const permission = await Notification.requestPermission();
-          setNotificationPermission(permission);
+  const requestPermission = async () => {
+    try {
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        const result = await Notification.requestPermission();
+        setPermission(result);
 
-          if (permission === 'granted' && currentUser) {
-            
-            // ----------------------------------------------------
-            // FIX: Explicitly register the Service Worker first
-            // ----------------------------------------------------
-            const registration = await navigator.serviceWorker.register(
-              '/firebase-messaging-sw.js'
-            );
-            
-            // Wait for the service worker to be active
-            // This prevents the "no active Service Worker" error
-            await navigator.serviceWorker.ready;
+        if (result === 'granted' && currentUser) {
+          const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          await navigator.serviceWorker.ready;
 
-            // 2. Get the Token (passing the registration explicitly)
-            const currentToken = await getToken(messaging, {
-              vapidKey: VAPID_KEY,
-              serviceWorkerRegistration: registration
+          const currentToken = await getToken(messaging, {
+            vapidKey: VAPID_KEY,
+            serviceWorkerRegistration: registration
+          });
+
+          if (currentToken) {
+            const userRef = doc(db, 'users', currentUser.uid);
+            await updateDoc(userRef, {
+               fcmTokens: arrayUnion(currentToken)
             });
-
-            if (currentToken) {
-              // 3. Save Token to Firestore (Check if exists first to save writes)
-              const userRef = doc(db, 'users', currentUser.uid);
-              const userSnap = await getDoc(userRef);
-              
-              if (userSnap.exists()) {
-                const existingTokens = userSnap.data().fcmTokens || [];
-                if (!existingTokens.includes(currentToken)) {
-                   await updateDoc(userRef, {
-                      fcmTokens: arrayUnion(currentToken)
-                   });
-                   console.log('FCM Token synced to Firestore.');
-                } else {
-                   console.log('FCM Token already exists in Firestore.');
-                }
-              }
-            } else {
-              console.log('No registration token available.');
-            }
+            console.log('Token registered.');
           }
         }
-      } catch (error) {
-        console.error('An error occurred while retrieving token:', error);
       }
-    };
+    } catch (error) {
+      console.error('Permission error:', error);
+    }
+  };
 
-    retrieveToken();
-  }, [currentUser]);
+  // 👇 NEW: Test Function
+  const sendTest = async () => {
+    const sendTestNotification = httpsCallable(functions, 'sendTestNotification');
+    try {
+        const result = await sendTestNotification();
+        if (result.data.success) {
+            alert(`Signal Sent! (Success: ${result.data.sentCount}, Failed: ${result.data.failureCount})`);
+        } else {
+            alert("Signal failed. No tokens found on server.");
+        }
+    } catch (e) {
+        alert("Error calling test function: " + e.message);
+    }
+  };
 
-  // Foreground Message Listener
-  useEffect(() => {
-    const unsubscribe = onMessage(messaging, (payload) => {
-      console.log('Foreground Message received: ', payload);
-      // Optional: Add a UI toast here later
-    });
-    return () => unsubscribe();
-  }, []);
-
-  return { notificationPermission };
+  return { permission, requestPermission, sendTest };
 };
 
 export default useFcmToken;
