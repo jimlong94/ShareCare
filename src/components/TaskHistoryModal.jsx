@@ -3,9 +3,10 @@ import React, { useState } from 'react';
 import { useAuth } from '../AuthContext'; 
 import { db } from '../firebase';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { LOCAL_DEMO } from '../localDemo';
 import { X, Send, Clock, User, AtSign, CheckCircle2, Share, MessageSquare } from 'lucide-react';
 
-function TaskHistoryModal({ onClose, task, currentUserRole, members = [] }) {
+function TaskHistoryModal({ onClose, task, currentUserRole, members = [], onUpdatesChange }) {
   const { currentUser } = useAuth(); 
   const [notesHistory, setNotesHistory] = useState(task.updates || []);
   const [newNote, setNewNote] = useState('');
@@ -38,6 +39,17 @@ function TaskHistoryModal({ onClose, task, currentUserRole, members = [] }) {
         acknowledgedBy: [] 
       };
 
+      if (LOCAL_DEMO) {
+        const next = [...notesHistory, newUpdateEntry];
+        setNotesHistory(next);
+        onUpdatesChange?.(task.id, next);
+        setNewNote('');
+        setTaggedUsers([]);
+        setShowTagMenu(false);
+        setLoading(false);
+        return;
+      }
+
       await updateDoc(doc(db, "tasks", task.id), {
         updates: arrayUnion(newUpdateEntry)
       });
@@ -63,7 +75,11 @@ function TaskHistoryModal({ onClose, task, currentUserRole, members = [] }) {
         if (!noteToUpdate.acknowledgedBy.includes(currentUser.uid)) {
             noteToUpdate.acknowledgedBy.push(currentUser.uid);
             updatedHistory[noteIndex] = noteToUpdate;
-            await updateDoc(doc(db, "tasks", task.id), { updates: updatedHistory });
+            if (LOCAL_DEMO) {
+              onUpdatesChange?.(task.id, updatedHistory);
+            } else {
+              await updateDoc(doc(db, "tasks", task.id), { updates: updatedHistory });
+            }
             setNotesHistory(updatedHistory);
         }
     } catch (e) { console.error(e); }

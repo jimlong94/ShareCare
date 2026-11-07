@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth'; 
 import { doc, setDoc, onSnapshot } from 'firebase/firestore'; 
 import { auth, db } from './firebase';
+import { LOCAL_DEMO, demoUser, demoProfile } from './localDemo';
 
 const AuthContext = createContext();
 
@@ -17,16 +18,19 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(LOCAL_DEMO ? demoUser : null);
+  const [loading, setLoading] = useState(!LOCAL_DEMO);
   
   // These now update instantly when Firestore changes
-  const [hasAcceptedHipaa, setHasAcceptedHipaa] = useState(null); 
-  const [userProfile, setUserProfile] = useState({ groupId: null, role: null });
+  const [hasAcceptedHipaa, setHasAcceptedHipaa] = useState(LOCAL_DEMO ? true : null); 
+  const [userProfile, setUserProfile] = useState(
+    LOCAL_DEMO ? demoProfile : { groupId: null, role: null }
+  );
 
   // --- Auth Actions ---
 
   const signup = async (email, password) => { 
+    if (LOCAL_DEMO) return { user: demoUser };
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const user = userCredential.user;
 
@@ -41,14 +45,20 @@ export const AuthProvider = ({ children }) => {
   };
 
   const login = (email, password) => {
+    if (LOCAL_DEMO) return Promise.resolve({ user: demoUser });
     return signInWithEmailAndPassword(auth, email, password);
   };
 
   const logout = () => {
+    if (LOCAL_DEMO) return Promise.resolve();
     return signOut(auth);
   };
 
   const completeOnboarding = async () => {
+    if (LOCAL_DEMO) {
+      setHasAcceptedHipaa(true);
+      return;
+    }
     if (currentUser && currentUser.uid) {
       const userRef = doc(db, "users", currentUser.uid);
       const timestamp = new Date();
@@ -71,6 +81,7 @@ export const AuthProvider = ({ children }) => {
   // --- Real-Time Listener Logic ---
   
   useEffect(() => {
+    if (LOCAL_DEMO) return;
     let unsubscribeProfile = null;
 
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {

@@ -6,6 +6,7 @@ import {
   collection, addDoc, query, where, onSnapshot, deleteDoc, doc, getDocs, limit, writeBatch 
 } from 'firebase/firestore';
 import { encryptData, decryptData } from '../utils/crypto';
+import { LOCAL_DEMO } from '../localDemo';
 import { 
   Lock, Unlock, MapPin, Phone, FileText, User, Plus, Trash2, 
   Share, StickyNote, CheckCircle2, AlertCircle, RefreshCw, AtSign, Info, Shield 
@@ -25,7 +26,7 @@ function KeyInfo({ groupId, userRole, members = [] }) {
   const SHARE_SIGNATURE = "\n\n— via The Zen Family Planner\nzenfamilyplanner.com";
 
   useEffect(() => {
-    if (!isUnlocked || !groupId) return;
+    if (LOCAL_DEMO || !isUnlocked || !groupId) return;
     let collectionName = 'key_documents';
     if (activeTab === 'providers') collectionName = 'key_providers';
     if (activeTab === 'notes') collectionName = 'key_notes';
@@ -39,6 +40,10 @@ function KeyInfo({ groupId, userRole, members = [] }) {
   const handleUnlock = async (e) => {
     e.preventDefault();
     if (pin.length < 4) { alert("PIN must be at least 4 characters"); return; }
+    if (LOCAL_DEMO) {
+      setIsUnlocked(true);
+      return;
+    }
     setLoading(true);
     try {
         const docQuery = query(collection(db, 'key_documents'), where('groupId', '==', groupId), limit(1));
@@ -72,6 +77,13 @@ function KeyInfo({ groupId, userRole, members = [] }) {
     const confirmText = "RESET-VAULT";
     const userConfirm = window.prompt(`⚠️ EMERGENCY RESET ⚠️\n\nThis will DELETE ALL secure documents, providers, and notes.\n\nType "${confirmText}" to confirm:`);
     if (!userConfirm || userConfirm.toUpperCase() !== confirmText) { alert("Reset cancelled."); return; }
+    if (LOCAL_DEMO) {
+      setItems([]);
+      setIsUnlocked(true);
+      setPin('');
+      alert("Vault reset. Set a new PIN.");
+      return;
+    }
     setLoading(true);
     try {
         const batch = writeBatch(db);
@@ -113,7 +125,7 @@ function KeyInfo({ groupId, userRole, members = [] }) {
   const handleShareList = async () => {
     if (activeTab !== 'providers') return;
     let text = "🏥 PROVIDER LIST\n\n";
-    items.forEach(item => {
+    shownItems.forEach(item => {
         text += `• ${decryptData(item.name, pin)} (${decryptData(item.role, pin)})\n`;
         text += `  📞 ${decryptData(item.phone, pin)}\n`;
         text += `  📍 ${decryptData(item.address, pin)}\n\n`;
@@ -138,19 +150,29 @@ function KeyInfo({ groupId, userRole, members = [] }) {
       targetCollection = 'key_notes';
       payload = { ...payload, title: encryptData(newItem.title, pin), content: encryptData(newItem.content, pin), mentions: taggedUsers, acknowledgedBy: [] };
     }
+    if (LOCAL_DEMO) {
+      setItems((prev) => [...prev, { ...payload, id: `local-item-${Date.now()}`, _tab: activeTab }]);
+      setNewItem({});
+      setTaggedUsers([]);
+      return;
+    }
     try { await addDoc(collection(db, targetCollection), payload); setNewItem({}); setTaggedUsers([]); } catch (err) { console.error(err); alert("Failed to save."); }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this secure item?")) return;
+    if (LOCAL_DEMO) {
+      setItems((prev) => prev.filter((item) => item.id !== id));
+      return;
+    }
     let col = activeTab === 'documents' ? 'key_documents' : activeTab === 'providers' ? 'key_providers' : 'key_notes';
     await deleteDoc(doc(db, col, id));
   };
 
-  const getHealthStats = () => {
+  const getHealthStats = (source = items) => {
     const essentials = ['Will', 'Power of Attorney', 'DNR', 'Insurance', 'Medication List'];
     const found = new Set();
-    items.forEach(item => {
+    source.forEach(item => {
         const name = decryptData(item.name, pin).toLowerCase();
         essentials.forEach(e => { if (name.includes(e.toLowerCase())) found.add(e); });
     });
@@ -170,6 +192,7 @@ function KeyInfo({ groupId, userRole, members = [] }) {
   };
 
   const canEdit = userRole === 'Admin' || userRole === 'Editor';
+  const shownItems = LOCAL_DEMO ? items.filter((item) => item._tab === activeTab) : items;
   const inputBase = "w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all placeholder:text-slate-400";
 
   // LOCKED VIEW
@@ -200,7 +223,7 @@ function KeyInfo({ groupId, userRole, members = [] }) {
   }
 
   // UNLOCKED VIEW
-  const health = activeTab === 'documents' ? getHealthStats() : null;
+  const health = activeTab === 'documents' ? getHealthStats(shownItems) : null;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
@@ -215,7 +238,7 @@ function KeyInfo({ groupId, userRole, members = [] }) {
             </div>
         </div>
         <div className="flex gap-2 w-full md:w-auto">
-            {activeTab === 'providers' && items.length > 0 && (
+            {activeTab === 'providers' && shownItems.length > 0 && (
                 <button onClick={handleShareList} className="flex-1 md:flex-none flex items-center justify-center gap-2 text-sm font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 px-4 py-2.5 rounded-xl transition-colors border border-teal-100"><Share size={16} /> Share List</button>
             )}
             <button onClick={() => { setIsUnlocked(false); setPin(''); }} className="flex-1 md:flex-none text-sm font-bold text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-4 py-2.5 rounded-xl transition-colors">Lock 🔒</button>
@@ -267,7 +290,7 @@ function KeyInfo({ groupId, userRole, members = [] }) {
 
       {/* The List Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {items.map(item => {
+        {shownItems.map(item => {
             const isMentioned = activeTab === 'notes' && item.mentions?.includes(currentUser.uid);
             return (
               <div key={item.id} className={`relative group p-6 rounded-2xl shadow-sm border transition-all hover:-translate-y-1 hover:shadow-md ${activeTab === 'notes' ? 'bg-amber-50/50 border-amber-100' : 'bg-white border-slate-100'} ${isMentioned ? 'ring-2 ring-amber-400 ring-offset-2' : ''}`}>

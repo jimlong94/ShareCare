@@ -20,6 +20,7 @@ import {
   doc, updateDoc, where, deleteDoc, 
 } from 'firebase/firestore'; 
 import { Users, Leaf, HelpCircle, LogOut } from 'lucide-react';
+import { LOCAL_DEMO, demoMembers, demoTasks } from './localDemo';
 
 function App() {
   const { currentUser, logout, hasAcceptedHipaa, userProfile } = useAuth(); 
@@ -34,8 +35,8 @@ function App() {
   const [taskToView, setTaskToView] = useState(null);
 
   // --- Data State ---
-  const [tasks, setTasks] = useState([]); 
-  const [members, setMembers] = useState([]); 
+  const [tasks, setTasks] = useState(LOCAL_DEMO ? demoTasks : []); 
+  const [members, setMembers] = useState(LOCAL_DEMO ? demoMembers : []); 
   const [secureMentions, setSecureMentions] = useState([]);
   const [retryTrigger, setRetryTrigger] = useState(0);
   
@@ -72,6 +73,7 @@ function App() {
 
   // --- 1. Fetch Members ---
   useEffect(() => {
+    if (LOCAL_DEMO) return;
     if (currentUser && currentGroupId) {
       const q = query(collection(db, "users"), where('groupId', '==', currentGroupId));
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -89,6 +91,7 @@ function App() {
 
   // --- 2. Fetch Tasks ---
   useEffect(() => {
+    if (LOCAL_DEMO) return;
     if (currentUser && hasAcceptedHipaa && currentGroupId) {
       let tasksCollectionRef = collection(db, "tasks");
       let q = query(tasksCollectionRef, where('groupId', '==', currentGroupId)); 
@@ -110,6 +113,7 @@ function App() {
 
   // --- 3. Fetch Secure Mentions ---
   useEffect(() => {
+    if (LOCAL_DEMO) return;
     if (currentUser && currentGroupId) {
       const q = query(collection(db, "key_notes"), where('groupId', '==', currentGroupId), where('mentions', 'array-contains', currentUser.uid));
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -137,22 +141,50 @@ function App() {
   const handleEditClick = (task) => { setTaskToEdit(task); setIsTaskModalOpen(true); };
   const handleDelete = async (taskId, taskTitle) => {
     if (!window.confirm(`Delete "${taskTitle}"?`)) return;
+    if (LOCAL_DEMO) {
+      setTasks((prev) => prev.filter((task) => task.id !== taskId));
+      return;
+    }
     try { await deleteDoc(doc(db, "tasks", taskId)); } catch (e) { console.error(e); }
   };
   const handleCloseTaskModal = () => { setIsTaskModalOpen(false); setTaskToEdit(null); };
 
+  const handleTaskUpdates = (taskId, updates) => {
+    setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, updates } : task)));
+    setTaskToView((prev) => (prev && prev.id === taskId ? { ...prev, updates } : prev));
+  };
+
   const handleSave = async (submittedTask) => {
     if (!hasAcceptedHipaa || !currentGroupId) return;
+    const dataToSave = {
+      title: submittedTask.title, assignee: submittedTask.assignee, assigneeId: submittedTask.assigneeId, 
+      category: submittedTask.category, status: submittedTask.status, dueDate: submittedTask.dueDate, updates: submittedTask.updates, 
+    };
+    if (LOCAL_DEMO) {
+      if (submittedTask.id) {
+        setTasks((prev) => prev.map((task) => (task.id === submittedTask.id ? { ...task, ...dataToSave } : task)));
+      } else {
+        setTasks((prev) => [{
+          ...dataToSave,
+          id: `local-task-${Date.now()}`,
+          createdBy: currentUser.email,
+          createdAt: new Date(),
+          groupId: currentGroupId,
+        }, ...prev]);
+      }
+      handleCloseTaskModal();
+      return;
+    }
     try {
-      const dataToSave = {
-        title: submittedTask.title, assignee: submittedTask.assignee, assigneeId: submittedTask.assigneeId, 
-        category: submittedTask.category, status: submittedTask.status, dueDate: submittedTask.dueDate, updates: submittedTask.updates, 
-      };
       if (submittedTask.id) await updateDoc(doc(db, "tasks", submittedTask.id), dataToSave);
       else await addDoc(collection(db, "tasks"), { ...dataToSave, createdBy: currentUser.email, createdAt: new Date(), groupId: currentGroupId });
       handleCloseTaskModal();
     } catch (e) { console.error(e); alert("Save failed."); }
   };
+
+  const visibleTasks = LOCAL_DEMO && filterAssignee !== 'All'
+    ? tasks.filter((task) => task.assignee === filterAssignee || task.assigneeId === filterAssignee)
+    : tasks;
   
   if (!currentUser) return <Auth />;
   if (hasAcceptedHipaa === false) return <OnboardingWizard />;
@@ -227,13 +259,13 @@ function App() {
                <div className="text-xs text-slate-400 font-medium uppercase tracking-wider">Sorted by Date</div>
             </div>
 
-            {tasks.length === 0 ? (
+            {visibleTasks.length === 0 ? (
               <div className="text-center py-24 bg-white border-2 border-dashed border-slate-200 rounded-3xl">
                   <p className="text-slate-400 font-medium">No tasks found. Enjoy the quiet.</p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {tasks.map((task) => (
+                {visibleTasks.map((task) => (
                   <TaskCard key={task.id} task={task} role={currentUserRole} onClick={handleTaskClick} onEdit={handleEditClick} onDelete={handleDelete} />
                 ))}
               </div>
@@ -249,7 +281,7 @@ function App() {
       {isTaskModalOpen && <NewTaskModal onClose={handleCloseTaskModal} onSave={handleSave} members={members} task={taskToEdit} />}
       {isInviteModalOpen && <InviteModal onClose={() => setIsInviteModalOpen(false)} currentGroupId={currentGroupId} />}
       {isSettingsOpen && <GroupSettingsModal onClose={() => setIsSettingsOpen(false)} />}
-      {taskToView && <TaskHistoryModal onClose={() => setTaskToView(null)} task={taskToView} currentUserRole={currentUserRole} members={members} />}
+      {taskToView && <TaskHistoryModal onClose={() => setTaskToView(null)} task={taskToView} currentUserRole={currentUserRole} members={members} onUpdatesChange={handleTaskUpdates} />}
     </div>
   )
 }

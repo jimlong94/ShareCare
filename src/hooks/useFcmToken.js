@@ -4,6 +4,7 @@ import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions'; // 👈 New Import
 import { messaging, db, functions } from '../firebase'; // 👈 Import functions
 import { useAuth } from '../AuthContext';
+import { LOCAL_DEMO } from '../localDemo';
 
 const VAPID_KEY = "BErIFYhGyXjRX2YBCjRXF2xV84c9x0x2djrYTQh5yDgBMad7KPYsxLtcLvEElo2NBGH4WT2DWBfQQxWHpNkik7g"; 
 
@@ -14,6 +15,7 @@ const useFcmToken = () => {
   );
 
   const requestPermission = async () => {
+    if (LOCAL_DEMO) return;
     try {
       if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
         const result = await Notification.requestPermission();
@@ -44,6 +46,10 @@ const useFcmToken = () => {
 
   // 👇 NEW: Test Function
   const sendTest = async () => {
+    if (LOCAL_DEMO) {
+      alert('Notifications are off in local demo mode.');
+      return;
+    }
     const sendTestNotification = httpsCallable(functions, 'sendTestNotification');
     try {
         const result = await sendTestNotification();

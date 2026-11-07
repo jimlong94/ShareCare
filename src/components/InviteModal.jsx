@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
 import { collection, addDoc } from 'firebase/firestore';
+import { LOCAL_DEMO } from '../localDemo';
 import { X, Copy, Users, Check, Ticket, ArrowRight } from 'lucide-react';
 
 function InviteModal({ onClose, currentGroupId }) {
@@ -17,6 +18,11 @@ function InviteModal({ onClose, currentGroupId }) {
     setError(null);
     setLoading(true);
     if (!currentGroupId) { setError("Group ID missing."); setLoading(false); return; }
+    if (LOCAL_DEMO) {
+      setInviteToken(`LOCAL-${Math.random().toString(36).slice(2, 8).toUpperCase()}`);
+      setLoading(false);
+      return;
+    }
 
     try {
       const docRef = await addDoc(collection(db, "invites"), {

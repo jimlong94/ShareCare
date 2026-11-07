@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { db } from '../firebase';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { X, Shield, User, UserMinus, Crown, Copy, Check } from 'lucide-react';
+import { LOCAL_DEMO, demoMembers } from '../localDemo';
 
 function GroupSettingsModal({ onClose }) {
   const { userProfile, currentUser } = useAuth();
@@ -12,6 +13,11 @@ function GroupSettingsModal({ onClose }) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    if (LOCAL_DEMO) {
+      setMembers(demoMembers);
+      setLoading(false);
+      return;
+    }
     if (userProfile?.groupId) {
       const q = query(collection(db, "users"), where('groupId', '==', userProfile.groupId));
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -29,6 +35,10 @@ function GroupSettingsModal({ onClose }) {
   const handleRemoveMember = async (memberId, memberName) => {
     if (memberId === currentUser.uid) return;
     if (!window.confirm(`Remove ${memberName} from the Family Group?`)) return;
+    if (LOCAL_DEMO) {
+      setMembers((prev) => prev.filter((member) => member.id !== memberId));
+      return;
+    }
 
     try {
       await updateDoc(doc(db, "users", memberId), {
