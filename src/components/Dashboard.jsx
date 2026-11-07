@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { db } from '../firebase';
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { LOCAL_DEMO } from '../localDemo';
 import { 
   Sun, Moon, Coffee, CheckCircle2, Calendar, ArrowRight, 
   Activity, Bell, ShieldAlert, ChevronDown, UserCheck, X // 👈 Added X here
@@ -47,6 +48,7 @@ function Dashboard({ tasks, currentUser, members, secureMentions = [], onNavigat
   });
 
   const handleAcknowledgeSecure = async (noteId) => {
+    if (LOCAL_DEMO) return;
     try {
         await updateDoc(doc(db, "key_notes", noteId), { acknowledgedBy: arrayUnion(currentUser.uid) });
     } catch (e) { console.error(e); }
